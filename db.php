@@ -2,7 +2,7 @@
 $host = "localhost";
 $user = "root";
 $pass = "";
-$dbname = "transport";
+$dbname = "transport_db";
 
 $conn = new mysqli($host, $user, $pass, $dbname);
 

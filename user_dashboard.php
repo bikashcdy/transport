@@ -543,6 +543,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
                 <li><a href="#" onclick="showSection('services')" id="nav-services">Services</a></li>
                 <li><a href="#" onclick="showSection('contact')" id="nav-contact">Contact</a></li>
                 <li><a href="#" onclick="showSection('myBooking')" id="nav-myBooking">My Booking</a></li>
+                <li><a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
             </ul>
             <a href="#demo" class="cta-btn">Free Demo</a>
         </nav>
@@ -629,7 +630,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
     <section class="booking-dashboard" id="myBooking">
         <h2 class="section-title">My Bookings</h2>
         <p class="section-subtitle">Manage and view your travel bookings</p>
-        
+
         <div id="bookingsList">
             <!-- Bookings will be populated here -->
         </div>
@@ -664,7 +665,8 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
             </div>
             <div class="modal-buttons">
                 <button class="modal-btn modal-btn-secondary" onclick="closeCancelModal()">Keep Booking</button>
-                <button class="modal-btn modal-btn-danger" id="confirmCancelBtn" onclick="confirmCancellation()" disabled>Cancel Booking</button>
+                <button class="modal-btn modal-btn-danger" id="confirmCancelBtn" onclick="confirmCancellation()"
+                    disabled>Cancel Booking</button>
             </div>
         </div>
     </div>
@@ -675,8 +677,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
 
     <script>
     // Sample booking data (in a real app, this would come from a database)
-    let bookings = [
-        {
+    let bookings = [{
             id: '876543',
             from: 'Kathmandu, Nepal',
             to: 'Pokhara, Nepal',
@@ -774,7 +775,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
     function createBookingCard(booking) {
         const card = document.createElement('div');
         card.className = 'booking-card';
-        
+
         const statusClass = booking.status === 'confirmed' ? 'status-confirmed' : 'status-cancelled';
         const statusText = booking.status === 'confirmed' ? 'Confirmed' : 'Cancelled';
 
@@ -952,11 +953,11 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
 
     function formatDate(dateString) {
         const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
+        return date.toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
         });
     }
 
@@ -1011,7 +1012,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
         let farePerKm = vehicleType === 'taxi' ? 25 : vehicleType === 'bus' ? 10 : 15;
         if (distance > 0) {
             document.getElementById('fareResult').innerHTML =
-                `Estimated Fare for ${distance} km by ${vehicleType.toUpperCase()}: Rs. ${farePerKm*distance}`;
+                `Estimated Fare for ${distance} km by ${vehicleType.toUpperCase()}: Rs. ${farePerKm * distance}`;
             document.getElementById('fareResult').style.display = 'block';
         } else alert('Enter valid distance');
     }
@@ -1034,7 +1035,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
 
         // Generate 6-digit booking ID
         let bookingId = Math.floor(100000 + Math.random() * 900000).toString();
-        
+
         // Add new booking to the array
         const newBooking = {
             id: bookingId,
