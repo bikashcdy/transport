@@ -51,16 +51,17 @@ function pageContent()
 <!-- Users Table -->
 <table class="table table-striped">
     <tr>
-        <th>ID</th>
+        <th>SN</th>
         <th>Name</th>
         <th>Email</th>
         <th>Role</th>
         <th>Created</th>
         <th>Actions</th>
     </tr>
-    <?php while ($row = $result->fetch_assoc()): ?>
+    <?php $i = 1;
+        while ($row = $result->fetch_assoc()): ?>
     <tr>
-        <td><?= $row['id']; ?></td>
+        <td><?= $i++; ?></td>
         <td><?= $row['name']; ?></td>
         <td><?= $row['email']; ?></td>
         <td><?= ucfirst($row['user_type']); ?></td>
