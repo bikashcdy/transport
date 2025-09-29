@@ -95,7 +95,7 @@ $pageTitle = $pageTitle ?? "Admin Panel";
             <?php if ($pageTitle === "Admin Dashboard"): ?>
             <!-- Show only on Dashboard -->
             <div class="d-flex align-items-center gap-2">
-                <p class="mb-0">Welcome, <?= $_SESSION['username'] ?? 'Admin'; ?>!</p>
+                <p class="mb-0">Welcome, <?= $_SESSION['user_name'] ?? 'Admin'; ?> !</p>
             </div>
             <?php else: ?>
             <!-- Show only Add button on other pages -->
