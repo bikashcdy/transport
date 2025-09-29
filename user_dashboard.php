@@ -11,6 +11,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="shortcut icon" href="favi.png" type="image/x-icon">
     <title>Transport Management System (TMS)</title>
     <style>
     * {
@@ -275,6 +276,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
                 <li><a href="#overview">Overview</a></li>
                 <li><a href="#services">Services</a></li>
                 <li><a href="#contact">Contact</a></li>
+                <li><a href="#myBooking">My Booking</a></li>
             </ul>
             <a href="#demo" class="cta-btn">Free Demo</a>
         </nav>
