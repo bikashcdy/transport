@@ -81,7 +81,8 @@ $pageTitle = $pageTitle ?? "Admin Panel";
         <a href="admin_dashboard.php"><i class="fas fa-home"></i> Dashboard</a>
         <a href="vehicles.php"><i class="fas fa-bus"></i> Vehicles</a>
         <a href="users.php"><i class="fas fa-users"></i> Users</a>
-        <a href="schedules.php"><i class="fas fa-calendar-alt"></i> Schedules</a>
+        <a href="ways.php"><i class="fas fa-road"></i> Way</a>
+        <a href="bookings.php"><i class="fas fa-calendar-alt"></i> Booking</a>
         <a href="reports.php"><i class="fas fa-chart-line"></i> Reports</a>
         <a href="settings.php"><i class="fas fa-cogs"></i> Settings</a>
         <a href="../logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
