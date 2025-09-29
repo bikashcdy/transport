@@ -1,165 +1,77 @@
 <?php
-session_start();
+$pageTitle = "Admin Dashboard";
 
-// Allow only admin
-if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'admin') {
-  header("Location: index.php");
-  exit();
-}
-include 'db.php';
-?>
+function pageContent()
+{
+    global $conn;
 
-<!DOCTYPE html>
-<html lang="en">
+    // Fetch stats
+    $totalVehicles = $conn->query("SELECT COUNT(*) AS total FROM vehicles")->fetch_assoc()['total'];
+    $totalUsers = $conn->query("SELECT COUNT(*) AS total FROM users")->fetch_assoc()['total'];
+    $activeBookings = $conn->query("SELECT COUNT(*) AS total FROM bookings WHERE status='active'")->fetch_assoc()['total'];
+    $reports = $conn->query("SELECT COUNT(*) AS total FROM reports")->fetch_assoc()['total'];
+    ?>
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard - TMS</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-    <style>
-    body {
-        margin: 0;
-        font-family: Arial, sans-serif;
-        display: flex;
-        height: 100vh;
-        background: #f4f6f9;
-    }
-
-    /* Sidebar */
-    .sidebar {
-        width: 250px;
-        background: #1a1b5e;
-        color: white;
-        display: flex;
-        flex-direction: column;
-        padding: 20px 0;
-    }
-
-    .sidebar h2 {
-        text-align: center;
-        margin-bottom: 30px;
-    }
-
-    .sidebar a {
-        display: block;
-        padding: 12px 20px;
-        color: white;
-        text-decoration: none;
-        transition: background 0.3s;
-    }
-
-    .sidebar a:hover {
-        background: #4f46e5;
-    }
-
-    /* Main */
-    .main {
-        flex: 1;
-        padding: 20px;
-        overflow-y: auto;
-    }
-
-    header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        background: white;
-        padding: 15px 20px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        margin-bottom: 20px;
-    }
-
-    .cards {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 20px;
-    }
-
-    .card {
-        background: white;
-        padding: 20px;
-        border-radius: 8px;
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-        text-align: center;
-    }
-
-    .card h3 {
-        margin-bottom: 10px;
-        color: #4f46e5;
-    }
-
-    .card p {
-        font-size: 1.5rem;
-        font-weight: bold;
-    }
-    </style>
-</head>
-
-<body>
-
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <h2>🚛 TMS Admin</h2>
-        <a href="admin_dashboard.php"><i class="fas fa-home"></i> Dashboard</a>
-        <a href="vehicles.php"><i class="fas fa-bus"></i> Vehicles</a>
-        <a href="users.php"><i class="fas fa-users"></i> Users</a>
-        <a href="schedules.php"><i class="fas fa-calendar-alt"></i> Schedules</a>
-        <a href="reports.php"><i class="fas fa-chart-line"></i> Reports</a>
-        <a href="settings.php"><i class="fas fa-cogs"></i> Settings</a>
-        <a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
-    </div>
-
-    <!-- Main -->
-    <div class="main">
-        <header>
-            <h2>Admin Dashboard</h2>
-            <p>Welcome, <?= $_SESSION['username'] ?? 'Admin'; ?>!</p>
-        </header>
-
-        <div class="cards">
-            <div class="card">
-                <h3>Total Vehicles</h3>
-                <p>
-                    <?php
-          $result = $conn->query("SELECT COUNT(*) AS total FROM vehicles");
-          echo $result->fetch_assoc()['total'];
-          ?>
-                </p>
-            </div>
-
-            <div class="card">
-                <h3>Total Users</h3>
-                <p>
-                    <?php
-          $result = $conn->query("SELECT COUNT(*) AS total FROM users");
-          echo $result->fetch_assoc()['total'];
-          ?>
-                </p>
-            </div>
-
-            <div class="card">
-                <h3>Active Bookings</h3>
-                <p>
-                    <?php
-          $result = $conn->query("SELECT COUNT(*) AS total FROM bookings WHERE status='active'");
-          echo $result->fetch_assoc()['total'];
-          ?>
-                </p>
-            </div>
-
-            <div class="card">
-                <h3>Reports Generated</h3>
-                <p>
-                    <?php
-          $result = $conn->query("SELECT COUNT(*) AS total FROM reports");
-          echo $result->fetch_assoc()['total'];
-          ?>
-                </p>
+<div class="row g-4">
+    <!-- Vehicles -->
+    <div class="col-md-3 col-sm-6">
+        <div class="card text-center shadow-sm border-0 h-100"
+            style="background:linear-gradient(45deg,#4f46e5,#6366f1);color:white;">
+            <div class="card-body">
+                <i class="fas fa-bus fa-2x mb-2"></i>
+                <h5>Total Vehicles</h5>
+                <h2><?= $totalVehicles; ?></h2>
             </div>
         </div>
     </div>
 
-</body>
+    <!-- Users -->
+    <div class="col-md-3 col-sm-6">
+        <div class="card text-center shadow-sm border-0 h-100"
+            style="background:linear-gradient(45deg,#10b981,#34d399);color:white;">
+            <div class="card-body">
+                <i class="fas fa-users fa-2x mb-2"></i>
+                <h5>Total Users</h5>
+                <h2><?= $totalUsers; ?></h2>
+            </div>
+        </div>
+    </div>
 
-</html>
+    <!-- Active Bookings -->
+    <div class="col-md-3 col-sm-6">
+        <div class="card text-center shadow-sm border-0 h-100"
+            style="background:linear-gradient(45deg,#f59e0b,#fbbf24);color:white;">
+            <div class="card-body">
+                <i class="fas fa-ticket-alt fa-2x mb-2"></i>
+                <h5>Active Bookings</h5>
+                <h2><?= $activeBookings; ?></h2>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reports -->
+    <div class="col-md-3 col-sm-6">
+        <div class="card text-center shadow-sm border-0 h-100"
+            style="background:linear-gradient(45deg,#ef4444,#f87171);color:white;">
+            <div class="card-body">
+                <i class="fas fa-chart-line fa-2x mb-2"></i>
+                <h5>Reports Generated</h5>
+                <h2><?= $reports; ?></h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Optional: Recent activity table -->
+<div class="card mt-4 shadow-sm">
+    <div class="card-header bg-white">
+        <h5 class="mb-0"><i class="fas fa-history"></i> Recent Activity</h5>
+    </div>
+    <div class="card-body">
+        <p class="text-muted mb-0">You can show recent bookings, vehicle updates, or reports here.</p>
+    </div>
+</div>
+
+<?php }
+
+include 'template.php';

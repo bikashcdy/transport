@@ -47,7 +47,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 }
             } else {
                 $_SESSION['error'] = "Invalid password!";
-                header("Location: auth.php");
+                header("Location: index.php");
             }
         } else {
             $_SESSION['error'] = "No account found with that email.";
