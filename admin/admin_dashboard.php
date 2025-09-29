@@ -5,7 +5,7 @@ function pageContent()
 {
     global $conn;
 
-    // Fetch stats
+    // Fetching data from database using sql query 
     $totalVehicles = $conn->query("SELECT COUNT(*) AS total FROM vehicles")->fetch_assoc()['total'];
     $totalUsers = $conn->query("SELECT COUNT(*) AS total FROM users")->fetch_assoc()['total'];
     $activeBookings = $conn->query("SELECT COUNT(*) AS total FROM bookings WHERE status='active'")->fetch_assoc()['total'];
@@ -13,7 +13,7 @@ function pageContent()
     ?>
 
 <div class="row g-4">
-    <!-- Vehicles -->
+    <!-- Vehicles Card -->
     <div class="col-md-3 col-sm-6">
         <div class="card text-center shadow-sm border-0 h-100"
             style="background:linear-gradient(45deg,#4f46e5,#6366f1);color:white;">
@@ -25,7 +25,7 @@ function pageContent()
         </div>
     </div>
 
-    <!-- Users -->
+    <!-- Users Card -->
     <div class="col-md-3 col-sm-6">
         <div class="card text-center shadow-sm border-0 h-100"
             style="background:linear-gradient(45deg,#10b981,#34d399);color:white;">
@@ -37,7 +37,7 @@ function pageContent()
         </div>
     </div>
 
-    <!-- Active Bookings -->
+    <!-- Active Bookings Card -->
     <div class="col-md-3 col-sm-6">
         <div class="card text-center shadow-sm border-0 h-100"
             style="background:linear-gradient(45deg,#f59e0b,#fbbf24);color:white;">
@@ -49,7 +49,7 @@ function pageContent()
         </div>
     </div>
 
-    <!-- Reports -->
+    <!-- Reports Card -->
     <div class="col-md-3 col-sm-6">
         <div class="card text-center shadow-sm border-0 h-100"
             style="background:linear-gradient(45deg,#ef4444,#f87171);color:white;">
@@ -62,7 +62,7 @@ function pageContent()
     </div>
 </div>
 
-<!-- Optional: Recent activity table -->
+<!-- Recent activity table  -->
 <div class="card mt-4 shadow-sm">
     <div class="card-header bg-white">
         <h5 class="mb-0"><i class="fas fa-history"></i> Recent Activity</h5>

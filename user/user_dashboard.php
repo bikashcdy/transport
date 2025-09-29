@@ -1,7 +1,7 @@
 <?php
 session_start();
 if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
-    header("Location: index.php");
+    header("Location: ../index.php");
     exit;
 }
 ?>
@@ -543,7 +543,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
                 <li><a href="#" onclick="showSection('services')" id="nav-services">Services</a></li>
                 <li><a href="#" onclick="showSection('contact')" id="nav-contact">Contact</a></li>
                 <li><a href="#" onclick="showSection('myBooking')" id="nav-myBooking">My Booking</a></li>
-                <li><a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+                <li><a href="../logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
             </ul>
             <a href="#demo" class="cta-btn">Free Demo</a>
         </nav>

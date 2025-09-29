@@ -1,10 +1,10 @@
 <?php
 session_start();
 if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'admin') {
-    header("Location: index.php");
+    header("Location: ../index.php");
     exit();
 }
-include 'db.php';
+include '../db.php';
 
 // Default values (can be overridden by included pages)
 $pageTitle = $pageTitle ?? "Admin Panel";
@@ -84,7 +84,7 @@ $pageTitle = $pageTitle ?? "Admin Panel";
         <a href="schedules.php"><i class="fas fa-calendar-alt"></i> Schedules</a>
         <a href="reports.php"><i class="fas fa-chart-line"></i> Reports</a>
         <a href="settings.php"><i class="fas fa-cogs"></i> Settings</a>
-        <a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
+        <a href="../logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
     </div>
 
     <!-- Main -->

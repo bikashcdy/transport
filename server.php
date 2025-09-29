@@ -41,9 +41,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $_SESSION['user_name'] = $row['name'];
                 $_SESSION['user_type'] = $row['user_type'];
                 if ($_SESSION['user_type'] === 'admin') {
-                    header("Location: admin_dashboard.php");
+                    header("Location: admin/admin_dashboard.php");
                 } else {
-                    header("Location: user_dashboard.php");
+                    header("Location: user/user_dashboard.php");
                 }
             } else {
                 $_SESSION['error'] = "Invalid password!";

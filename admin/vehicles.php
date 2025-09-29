@@ -2,7 +2,7 @@
 $pageTitle = "Vehicles";
 
 // Your PHP logic (CRUD)
-include 'db.php';
+include '../db.php';
 
 // Fetch vehicle types
 $typesResult = $conn->query("SELECT * FROM vehicle_types");
