@@ -45,3 +45,28 @@ CREATE TABLE bookings (
 );
 
 
+-- Table for main routes
+CREATE TABLE ways (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    vehicle_id INT NOT NULL,
+    origin VARCHAR(100) NOT NULL,
+    destination VARCHAR(100) NOT NULL,
+    departure_time TIME NOT NULL,
+    arrival_time TIME NOT NULL,
+    price DECIMAL(10,2) DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (vehicle_id) REFERENCES vehicles(id)
+);
+
+-- Table for transit stops along a way
+CREATE TABLE way_transits (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    way_id INT NOT NULL,
+    transit_point VARCHAR(100) NOT NULL,
+    transit_duration INT DEFAULT 0, -- in minutes
+    transit_time TIME NOT NULL, 
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (way_id) REFERENCES ways(id) ON DELETE CASCADE
+);
+
+

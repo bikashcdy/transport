@@ -111,10 +111,12 @@ $result = $stmt->get_result();
                 <th>Arrival</th>
                 <th>Status</th>
                 <th>Booked On</th>
+                <th>Download</th>
             </tr>
         </thead>
         <tbody>
             <?php while ($booking = $result->fetch_assoc()): ?>
+
             <tr>
                 <td><?= htmlspecialchars($booking['booking_id']) ?></td>
                 <td>
@@ -129,10 +131,11 @@ $result = $stmt->get_result();
                     <?= ucfirst($booking['status']) ?>
                 </td>
                 <td><?= date("d M Y, g:i A", strtotime($booking['created_at'])) ?></td>
+                <td><a href="booking_pdf.php?booking_id=<?= urlencode($booking['booking_id']) ?>" target="_blank">
+                        📄 Download PDF
+                    </a></td>
             </tr>
-            <a href="booking_pdf.php?booking_id=<?= urlencode($booking['booking_id']) ?>" target="_blank">
-                📄 Download PDF
-            </a>
+
             <?php endwhile; ?>
         </tbody>
     </table>

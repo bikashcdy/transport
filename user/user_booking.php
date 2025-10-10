@@ -1,6 +1,12 @@
 <?php
 session_start();
 require_once '../db.php';
+require '../libs/PHPMailer/src/PHPMailer.php';
+require '../libs/PHPMailer/src/SMTP.php';
+require '../libs/PHPMailer/src/Exception.php';
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
 if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
     header("Location: ../index.php");
@@ -8,6 +14,13 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
 }
 
 $userId = $_SESSION['user_id'];
+
+// Fetch user email and name
+$userStmt = $conn->prepare("SELECT email, name FROM users WHERE id = ?");
+$userStmt->bind_param("i", $userId);
+$userStmt->execute();
+$userResult = $userStmt->get_result();
+$user = $userResult->fetch_assoc();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset($_POST['way_id'])) {
@@ -37,8 +50,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $vehicleId = $way['vehicle_id'];
     $origin = $way['origin'];
     $destination = $way['destination'];
-    $departureTime = date('Y-m-d') . ' ' . $way['departure_time'];
-    $arrivalTime = date('Y-m-d') . ' ' . $way['arrival_time'];
+
+    // Format time to full datetime for booking (today's date)
+    $today = date('Y-m-d');
+    $departureTime = $today . ' ' . $way['departure_time'];
+    $arrivalTime = $today . ' ' . $way['arrival_time'];
 
     $insert = $conn->prepare("
         INSERT INTO bookings (booking_id, user_id, vehicle_id, origin, destination, departure_time, arrival_time)
@@ -56,6 +72,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     );
 
     if ($insert->execute()) {
+        // ✅ Fetch transit stops for this way
+        $transitStmt = $conn->prepare("
+            SELECT transit_point, transit_time, transit_duration
+            FROM way_transits
+            WHERE way_id = ?
+        ");
+        $transitStmt->bind_param("i", $wayId);
+        $transitStmt->execute();
+        $transitResult = $transitStmt->get_result();
+
+        $transitsHTML = '';
+        if ($transitResult->num_rows > 0) {
+            $transitsHTML .= "<ul>";
+            while ($row = $transitResult->fetch_assoc()) {
+                $transitTimeFormatted = date("g:i A", strtotime($row['transit_time']));
+                $duration = (int) $row['transit_duration'];
+                $transitsHTML .= "<li><strong>{$row['transit_point']}</strong> - {$transitTimeFormatted}, {$duration} min</li>";
+            }
+            $transitsHTML .= "</ul>";
+        } else {
+            $transitsHTML = "<p>No transit stops.</p>";
+        }
+
+        // ✅ Send confirmation email
+        $mail = new PHPMailer(true);
+
+        try {
+            // Server settings
+            $mail->isSMTP();
+            $mail->Host = 'smtp.gmail.com';
+            $mail->SMTPAuth = true;
+            $mail->Username = 'bikashtransportt@gmail.com';
+            $mail->Password = 'rhhi twul ebnl bwyc'; // App Password
+            $mail->SMTPSecure = 'tls';
+            $mail->Port = 587;
+
+            // Recipients
+            $mail->setFrom('bikashtransportt@gmail.com', 'TMS Booking');
+            $mail->addAddress($user['email'], $user['name']);
+
+            // Format times to 12-hour format
+            $depTime = date("g:i A", strtotime($departureTime));
+            $arrTime = date("g:i A", strtotime($arrivalTime));
+
+            // Email content
+            $mail->isHTML(true);
+            $mail->Subject = 'Your Booking is Confirmed - ' . $bookingId;
+            $mail->Body = "
+                <h2>Booking Confirmation</h2>
+                <p>Dear <strong>{$user['name']}</strong>,</p>
+                <p>Your booking has been successfully confirmed.</p>
+                <p><strong>Booking ID:</strong> {$bookingId}</p>
+                <p><strong>From:</strong> {$origin} <br>
+                <strong>To:</strong> {$destination}</p>
+                <p><strong>Departure:</strong> {$depTime} <br>
+                <strong>Arrival:</strong> {$arrTime}</p>
+                <p><strong>Transit Stops:</strong><br>{$transitsHTML}</p>
+                <p>Thank you for choosing TMS!</p>
+            ";
+
+            $mail->send();
+        } catch (Exception $e) {
+            error_log("Email sending failed: " . $mail->ErrorInfo);
+        }
+
         header("Location: my_bookings.php?success=1");
         exit;
     } else {
@@ -64,3 +145,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 } else {
     echo "Invalid access method.";
 }
+?>
