@@ -4,7 +4,45 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
     header("Location: ../index.php");
     exit;
 }
+
+require_once '../db.php'; // Adjust the path to your DB config
+
+$waysData = [];
+
+$sql = "
+    SELECT w.id AS way_id, w.origin, w.destination, w.departure_time, w.arrival_time, w.price,
+           wt.transit_point, wt.transit_duration, wt.transit_time
+    FROM ways w
+    LEFT JOIN way_transits wt ON w.id = wt.way_id
+    ORDER BY w.id, wt.transit_time
+";
+
+$result = $conn->query($sql);
+
+if ($result && $result->num_rows > 0) {
+    while ($row = $result->fetch_assoc()) {
+        $wayId = $row['way_id'];
+        if (!isset($waysData[$wayId])) {
+            $waysData[$wayId] = [
+                'origin' => $row['origin'],
+                'destination' => $row['destination'],
+                'departure_time' => $row['departure_time'],
+                'arrival_time' => $row['arrival_time'],
+                'price' => $row['price'],
+                'transits' => []
+            ];
+        }
+        if ($row['transit_point']) {
+            $waysData[$wayId]['transits'][] = [
+                'point' => $row['transit_point'],
+                'duration' => $row['transit_duration'],
+                'time' => $row['transit_time']
+            ];
+        }
+    }
+}
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -502,6 +540,76 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
         opacity: 0.3;
     }
 
+
+    .routes-section {
+        padding: 4rem 2rem;
+        background: #f8fafc;
+    }
+
+    .route-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 2rem;
+    }
+
+    .route-card {
+        background: #ffffff;
+        border-radius: 15px;
+        padding: 2rem;
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
+        transition: transform 0.3s;
+        position: relative;
+    }
+
+    .route-card:hover {
+        transform: translateY(-5px);
+    }
+
+    .route-header {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1a1b5e;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .route-header i {
+        color: #6f42c1;
+    }
+
+    .route-info {
+        font-size: 0.95rem;
+        line-height: 1.6;
+        color: #333;
+    }
+
+    .route-info strong {
+        color: #6f42c1;
+    }
+
+    .transit-list {
+        margin-top: 1rem;
+    }
+
+    .transit-list ul {
+        padding-left: 1rem;
+        margin-top: 0.5rem;
+    }
+
+    .transit-badge {
+        display: inline-block;
+        background: #e0e7ff;
+        color: #3730a3;
+        padding: 0.25rem 0.75rem;
+        border-radius: 25px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        margin: 0.25rem 0;
+    }
+
+
     @media (max-width: 768px) {
         .nav-menu {
             display: none;
@@ -576,6 +684,48 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
             </div>
         </div>
     </section>
+
+    <section class="routes-section" id="availableWays">
+        <h2 class="section-title">Available Routes</h2>
+
+        <?php if (!empty($waysData)): ?>
+        <div class="route-grid">
+            <?php foreach ($waysData as $id => $way): ?>
+            <div class="route-card">
+                <div class="route-header">
+                    <i>🛣️</i> <?= htmlspecialchars($way['origin']) ?> ➝ <?= htmlspecialchars($way['destination']) ?>
+                </div>
+                <div class="route-info">
+                    <p><strong>Departure:</strong> <?= htmlspecialchars($way['departure_time']) ?></p>
+                    <p><strong>Arrival:</strong> <?= htmlspecialchars($way['arrival_time']) ?></p>
+                    <p><strong>Price:</strong> ₹<?= number_format($way['price'], 2) ?></p>
+                </div>
+                <?php if (!empty($way['transits'])): ?>
+                <div class="transit-list">
+                    <strong>Transit Stops:</strong>
+                    <ul>
+                        <?php foreach ($way['transits'] as $transit): ?>
+                        <li class="transit-badge">
+                            <?= htmlspecialchars($transit['point']) ?>
+                            (<?= htmlspecialchars($transit['time']) ?>,
+                            <?= htmlspecialchars($transit['duration']) ?> min)
+                        </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+                <?php endif; ?>
+            </div>
+            <?php endforeach; ?>
+        </div>
+        <?php else: ?>
+        <div class="empty-state">
+            <div class="icon">🚫</div>
+            <h3>No Routes Found</h3>
+            <p>There are currently no available transport routes.</p>
+        </div>
+        <?php endif; ?>
+    </section>
+
 
     <section class="services" id="services">
         <h2 class="section-title">Transport Management Services</h2>
