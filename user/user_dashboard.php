@@ -715,6 +715,11 @@ if ($result && $result->num_rows > 0) {
                     </ul>
                 </div>
                 <?php endif; ?>
+                <form action="user_booking.php" method="POST">
+                    <input type="hidden" name="way_id" value="<?= $id ?>">
+                    <button type="submit" class="form-btn" style="margin-top: 1rem;">Book Now</button>
+                </form>
+
             </div>
             <?php endforeach; ?>
         </div>
