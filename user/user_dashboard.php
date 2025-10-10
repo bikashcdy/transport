@@ -5,7 +5,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
     exit;
 }
 
-require_once '../db.php'; // Adjust the path to your DB config
+require_once '../db.php';
 
 $waysData = [];
 
@@ -32,7 +32,7 @@ if ($result && $result->num_rows > 0) {
                 'transits' => []
             ];
         }
-        if ($row['transit_point']) {
+        if (!empty($row['transit_point'])) {
             $waysData[$wayId]['transits'][] = [
                 'point' => $row['transit_point'],
                 'duration' => $row['transit_duration'],
@@ -42,6 +42,7 @@ if ($result && $result->num_rows > 0) {
     }
 }
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">
@@ -696,8 +697,8 @@ if ($result && $result->num_rows > 0) {
                     <i>🛣️</i> <?= htmlspecialchars($way['origin']) ?> ➝ <?= htmlspecialchars($way['destination']) ?>
                 </div>
                 <div class="route-info">
-                    <p><strong>Departure:</strong> <?= htmlspecialchars($way['departure_time']) ?></p>
-                    <p><strong>Arrival:</strong> <?= htmlspecialchars($way['arrival_time']) ?></p>
+                    <p><strong>Departure:</strong> <?= date("g:i A", strtotime($way['departure_time'])) ?></p>
+                    <p><strong>Arrival:</strong> <?= date("g:i A", strtotime($way['arrival_time'])) ?></p>
                     <p><strong>Price:</strong> ₹<?= number_format($way['price'], 2) ?></p>
                 </div>
                 <?php if (!empty($way['transits'])): ?>
@@ -707,8 +708,8 @@ if ($result && $result->num_rows > 0) {
                         <?php foreach ($way['transits'] as $transit): ?>
                         <li class="transit-badge">
                             <?= htmlspecialchars($transit['point']) ?>
-                            (<?= htmlspecialchars($transit['time']) ?>,
-                            <?= htmlspecialchars($transit['duration']) ?> min)
+                            (<?= date("g:i A", strtotime($transit['time'])) ?>,
+                            <?= (int) $transit['duration'] ?> min)
                         </li>
                         <?php endforeach; ?>
                     </ul>
@@ -725,6 +726,7 @@ if ($result && $result->num_rows > 0) {
         </div>
         <?php endif; ?>
     </section>
+
 
 
     <section class="services" id="services">
