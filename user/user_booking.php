@@ -56,19 +56,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $departureTime = $today . ' ' . $way['departure_time'];
     $arrivalTime = $today . ' ' . $way['arrival_time'];
 
+    // Set status to 'pending' instead of 'confirmed'
+    $status = 'pending';
+
     $insert = $conn->prepare("
-        INSERT INTO bookings (booking_id, user_id, vehicle_id, origin, destination, departure_time, arrival_time)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO bookings (booking_id, user_id, vehicle_id, origin, destination, departure_time, arrival_time, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ");
     $insert->bind_param(
-        "siissss",
+        "siisssss",
         $bookingId,
         $userId,
         $vehicleId,
         $origin,
         $destination,
         $departureTime,
-        $arrivalTime
+        $arrivalTime,
+        $status
     );
 
     if ($insert->execute()) {
@@ -95,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $transitsHTML = "<p>No transit stops.</p>";
         }
 
-        // ✅ Send confirmation email
+        // ✅ Send pending booking email
         $mail = new PHPMailer(true);
 
         try {
@@ -103,8 +107,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $mail->isSMTP();
             $mail->Host = 'smtp.gmail.com';
             $mail->SMTPAuth = true;
-            $mail->Username = 'bikashtransportt@gmail.com';
-            $mail->Password = 'rhhi twul ebnl bwyc'; // App Password
+            $mail->Username = 'bikashtransportt@gmail.com'; // Replace with your email
+            $mail->Password = 'rhhi twul ebnl bwyc'; // App password
             $mail->SMTPSecure = 'tls';
             $mail->Port = 587;
 
@@ -118,17 +122,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Email content
             $mail->isHTML(true);
-            $mail->Subject = 'Your Booking is Confirmed - ' . $bookingId;
+            $mail->Subject = 'Your Booking is Pending - ' . $bookingId;
             $mail->Body = "
-                <h2>Booking Confirmation</h2>
+                <h2>Booking Pending</h2>
                 <p>Dear <strong>{$user['name']}</strong>,</p>
-                <p>Your booking has been successfully confirmed.</p>
+                <p>Your booking has been successfully created and is now pending.</p>
                 <p><strong>Booking ID:</strong> {$bookingId}</p>
                 <p><strong>From:</strong> {$origin} <br>
                 <strong>To:</strong> {$destination}</p>
                 <p><strong>Departure:</strong> {$depTime} <br>
                 <strong>Arrival:</strong> {$arrTime}</p>
                 <p><strong>Transit Stops:</strong><br>{$transitsHTML}</p>
+                <p>We will notify you once your booking has been confirmed.</p>
                 <p>Thank you for choosing TMS!</p>
             ";
 
@@ -145,4 +150,3 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 } else {
     echo "Invalid access method.";
 }
-?>
