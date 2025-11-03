@@ -15,7 +15,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
 
 $userId = $_SESSION['user_id'];
 
-// Fetch user email and name
+
 $userStmt = $conn->prepare("SELECT email, name FROM users WHERE id = ?");
 $userStmt->bind_param("i", $userId);
 $userStmt->execute();
@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $wayId = intval($_POST['way_id']);
 
-    // Fetch way details
+   
     $stmt = $conn->prepare("
         SELECT w.*, v.id as vehicle_id
         FROM ways w
@@ -44,19 +44,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$way) {
         die("Route not found.");
     }
-
-    // Create booking
-    $bookingId = 'BK' . strtoupper(uniqid());
+        $bookingId = 'BK' . strtoupper(uniqid());
     $vehicleId = $way['vehicle_id'];
     $origin = $way['origin'];
     $destination = $way['destination'];
 
-    // Format time to full datetime for booking (today's date)
+
     $today = date('Y-m-d');
     $departureTime = $today . ' ' . $way['departure_time'];
     $arrivalTime = $today . ' ' . $way['arrival_time'];
 
-    // Set status to 'pending' instead of 'confirmed'
+
     $status = 'pending';
 
     $insert = $conn->prepare("
@@ -76,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     );
 
     if ($insert->execute()) {
-        // ✅ Fetch transit stops for this way
+        
         $transitStmt = $conn->prepare("
             SELECT transit_point, transit_time, transit_duration
             FROM way_transits
@@ -99,28 +97,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $transitsHTML = "<p>No transit stops.</p>";
         }
 
-        // ✅ Send pending booking email
+
         $mail = new PHPMailer(true);
 
         try {
-            // Server settings
+
             $mail->isSMTP();
             $mail->Host = 'smtp.gmail.com';
             $mail->SMTPAuth = true;
-            $mail->Username = 'bikashtransportt@gmail.com'; // Replace with your email
-            $mail->Password = 'rhhi twul ebnl bwyc'; // App password
+            $mail->Username = 'bikashtransportt@gmail.com';
+            $mail->Password = 'rhhi twul ebnl bwyc'; 
             $mail->SMTPSecure = 'tls';
             $mail->Port = 587;
 
-            // Recipients
+
             $mail->setFrom('bikashtransportt@gmail.com', 'TMS Booking');
             $mail->addAddress($user['email'], $user['name']);
 
-            // Format times to 12-hour format
+
             $depTime = date("g:i A", strtotime($departureTime));
             $arrTime = date("g:i A", strtotime($arrivalTime));
 
-            // Email content
+            
             $mail->isHTML(true);
             $mail->Subject = 'Your Booking is Pending - ' . $bookingId;
             $mail->Body = "

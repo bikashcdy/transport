@@ -48,18 +48,17 @@ function pageContent()
             </div>
         </div>
     </div>
-
-    <!-- Reports Card -->
-    <div class="col-md-3 col-sm-6">
-        <div class="card text-center shadow-sm border-0 h-100"
-            style="background:linear-gradient(45deg,#ef4444,#f87171);color:white;">
-            <div class="card-body">
-                <i class="fas fa-chart-line fa-2x mb-2"></i>
-                <h5>Reports Generated</h5>
-                <h2><?= $reports; ?></h2>
-            </div>
-        </div>
-    </div>
+  <!-- Reports Card -->
+   
+  <div class="col-md-3 col-sm-6">
+     <div class="card text-center shadow-sm border-0 h-100" style="background:linear-gradient(45deg,#ef4444,#f87171);color:white;"> 
+        <div class="card-body">
+             <i class="fas fa-chart-line fa-2x mb-2">
+             </i> <h5>Reports Generated</h5>
+              <h2><?= $reports; ?></h2> 
+            </div> 
+        </div> 
+   </div>
 </div>
 
 <!-- Recent activity table  -->

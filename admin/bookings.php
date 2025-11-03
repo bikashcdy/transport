@@ -56,7 +56,6 @@ if (isset($_POST['search'])) {
     ORDER BY bookings.departure_time DESC
 ");
 } else {
-    // Fetch all bookings if no search term
     $result = $conn->query("
     SELECT bookings.booking_id, bookings.user_id, bookings.vehicle_id, bookings.origin, bookings.destination, 
            bookings.departure_time, bookings.arrival_time, 
@@ -80,7 +79,7 @@ function pageContent()
     global $result, $search, $pageTitle;
 ?>
 
-    <!-- Search Form -->
+
     <form method="POST" class="mb-4">
         <div class="input-group">
             <input type="text" class="form-control" name="search" value="<?= htmlspecialchars($search); ?>" placeholder="Search Booking ID..." required>
@@ -88,7 +87,7 @@ function pageContent()
         </div>
     </form>
 
-    <!-- Bookings Table -->
+
     <table class="table table-striped">
         <tr>
             <th>SN</th>
@@ -117,7 +116,7 @@ function pageContent()
                 <td><?= number_format($row['price'], 2); ?></td> <!-- Price formatted correctly -->
                 <td><?= ucfirst($row['status']); ?></td>
                 <td>
-                    <!-- View Button -->
+                    
                     <button class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#viewModal<?= $row['booking_id']; ?>"><i class="fas fa-eye"></i></button>
 
                     <!-- Quick Confirm Button -->
@@ -129,12 +128,12 @@ function pageContent()
                         </button>
                     </form>
 
-                    <!-- Edit Status Button -->
+                  
                     <button class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#editModal<?= $row['booking_id']; ?>"><i class="fas fa-edit"></i></button>
                 </td>
             </tr>
 
-            <!-- View Modal -->
+           
             <div class="modal fade" id="viewModal<?= $row['booking_id']; ?>" tabindex="-1">
                 <div class="modal-dialog">
                     <div class="modal-content">
@@ -161,7 +160,7 @@ function pageContent()
                 </div>
             </div>
 
-            <!-- Edit Status Modal -->
+
             <div class="modal fade" id="editModal<?= $row['booking_id']; ?>" tabindex="-1">
                 <div class="modal-dialog">
                     <div class="modal-content">
@@ -194,27 +193,30 @@ function pageContent()
     </table>
 
 <?php
-} // end of pageContent()
+} 
 
-// PHPMailer Function to send booking confirmation email
+
+
+
+
 function sendBookingConfirmationEmail($userEmail, $userName, $bookingId)
 {
     $mail = new PHPMailer(true);
     try {
-        // Server settings
+       
         $mail->isSMTP();
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
-        $mail->Username = 'bikashtransportt@gmail.com'; // Your SMTP email
-        $mail->Password = 'rhhi twul ebnl bwyc';    // Your SMTP app password
+        $mail->Username = 'bikashtransportt@gmail.com'; 
+        $mail->Password = 'rhhi twul ebnl bwyc';   
         $mail->SMTPSecure = 'tls';
         $mail->Port = 587;
 
-        // Recipients
+        
         $mail->setFrom('bikashtransportt@gmail.com', 'TMS Booking');
-        $mail->addAddress($userEmail, $userName); // Add recipient
+        $mail->addAddress($userEmail, $userName); 
 
-        // Email content
+        
         $mail->isHTML(true);
         $mail->Subject = 'Booking Confirmation - ' . $bookingId;
         $mail->Body = "

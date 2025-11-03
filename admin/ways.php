@@ -19,19 +19,81 @@ if (isset($_POST['add_way'])) {
     $arrival_time = $_POST['arrival_time'];
     $price = $_POST['price'];
 
-    $conn->query("INSERT INTO ways (vehicle_id, origin, destination, departure_time, arrival_time, price)
-                  VALUES ('$vehicle_id','$origin','$destination','$departure_time','$arrival_time','$price')");
-    $way_id = $conn->insert_id;
+    $stmt = $conn->prepare("INSERT INTO ways (vehicle_id, origin, destination, departure_time, arrival_time, price)
+                  VALUES (?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("issssd", $vehicle_id, $origin, $destination, $departure_time, $arrival_time, $price);
+    $stmt->execute();
+    $way_id = $stmt->insert_id;
+    $stmt->close();
 
     // Save transit points if any
-    if (isset($_POST['transit_point'])) {
+    if (isset($_POST['transit_point']) && is_array($_POST['transit_point'])) {
+        $stmt = $conn->prepare("INSERT INTO way_transits (way_id, transit_point, transit_duration, transit_time)
+                          VALUES (?, ?, ?, ?)");
         foreach ($_POST['transit_point'] as $i => $point) {
-            $duration = $_POST['transit_duration'][$i];
-            $time = $_POST['transit_time'][$i];
-            $conn->query("INSERT INTO way_transits (way_id, transit_point, transit_duration, transit_time)
-                          VALUES ('$way_id','$point','$duration','$time')");
+            if (!empty($point)) {
+                $duration = $_POST['transit_duration'][$i];
+                $time = $_POST['transit_time'][$i];
+                $stmt->bind_param("isis", $way_id, $point, $duration, $time);
+                $stmt->execute();
+            }
         }
+        $stmt->close();
     }
+
+    header("Location: ways.php");
+    exit;
+}
+
+// Handle Edit Way
+if (isset($_POST['edit_way'])) {
+    $way_id = $_POST['way_id'];
+    $vehicle_id = $_POST['vehicle_id'];
+    $origin = $_POST['origin'];
+    $destination = $_POST['destination'];
+    $departure_time = $_POST['departure_time'];
+    $arrival_time = $_POST['arrival_time'];
+    $price = $_POST['price'];
+
+    $stmt = $conn->prepare("UPDATE ways SET vehicle_id=?, origin=?, destination=?, 
+                           departure_time=?, arrival_time=?, price=? WHERE id=?");
+    $stmt->bind_param("issssdi", $vehicle_id, $origin, $destination, $departure_time, $arrival_time, $price, $way_id);
+    $stmt->execute();
+    $stmt->close();
+
+    // Delete old transits and add new ones
+    $conn->query("DELETE FROM way_transits WHERE way_id=$way_id");
+    
+    if (isset($_POST['transit_point']) && is_array($_POST['transit_point'])) {
+        $stmt = $conn->prepare("INSERT INTO way_transits (way_id, transit_point, transit_duration, transit_time)
+                          VALUES (?, ?, ?, ?)");
+        foreach ($_POST['transit_point'] as $i => $point) {
+            if (!empty($point)) {
+                $duration = $_POST['transit_duration'][$i];
+                $time = $_POST['transit_time'][$i];
+                $stmt->bind_param("isis", $way_id, $point, $duration, $time);
+                $stmt->execute();
+            }
+        }
+        $stmt->close();
+    }
+
+    header("Location: ways.php");
+    exit;
+}
+
+// Handle Delete Way
+if (isset($_POST['delete_way'])) {
+    $way_id = $_POST['way_id'];
+    
+    // Delete transits first (if foreign key is not set to CASCADE)
+    $conn->query("DELETE FROM way_transits WHERE way_id=$way_id");
+    
+    // Delete the way
+    $stmt = $conn->prepare("DELETE FROM ways WHERE id=?");
+    $stmt->bind_param("i", $way_id);
+    $stmt->execute();
+    $stmt->close();
 
     header("Location: ways.php");
     exit;
@@ -121,7 +183,112 @@ $waysResult = $conn->query("SELECT w.*, v.vehicle_number
             </div>
         </div>
 
-        <!-- TODO: Edit & Delete Modals can be added later -->
+        <!-- Edit Way Modal -->
+        <div class="modal fade" id="editWayModal<?= $way['id']; ?>" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <form method="POST" class="modal-content">
+                    <input type="hidden" name="way_id" value="<?= $way['id']; ?>">
+                    <div class="modal-header">
+                        <h5>Edit Way</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-2">
+                            <label>Vehicle</label>
+                            <select name="vehicle_id" class="form-control" required>
+                                <option value="">Select Vehicle</option>
+                                <?php foreach ($vehicles as $v): ?>
+                                <option value="<?= $v['id']; ?>" <?= $v['id'] == $way['vehicle_id'] ? 'selected' : ''; ?>>
+                                    <?= $v['vehicle_number']; ?>
+                                </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="mb-2">
+                            <label>Origin</label>
+                            <input type="text" name="origin" class="form-control" value="<?= $way['origin']; ?>" required>
+                        </div>
+                        <div class="mb-2">
+                            <label>Destination</label>
+                            <input type="text" name="destination" class="form-control" value="<?= $way['destination']; ?>" required>
+                        </div>
+                        <div class="mb-2">
+                            <label>Departure Date & Time</label>
+                            <input type="datetime-local" name="departure_time" class="form-control" 
+                                   value="<?= date('Y-m-d\TH:i', strtotime($way['departure_time'])); ?>" required>
+                        </div>
+                        <div class="mb-2">
+                            <label>Arrival Date & Time</label>
+                            <input type="datetime-local" name="arrival_time" class="form-control" 
+                                   value="<?= date('Y-m-d\TH:i', strtotime($way['arrival_time'])); ?>" required>
+                        </div>
+                        <div class="mb-2">
+                            <label>Price</label>
+                            <input type="number" step="0.01" name="price" class="form-control" 
+                                   value="<?= $way['price']; ?>" required>
+                        </div>
+
+                        <hr>
+                        <h6>Transit Points</h6>
+                        <div id="editTransitContainer<?= $way['id']; ?>">
+                            <?php
+                            $tid = $way['id'];
+                            $transits = $conn->query("SELECT * FROM way_transits WHERE way_id=$tid");
+                            $transit_idx = 0;
+                            while ($t = $transits->fetch_assoc()): ?>
+                            <div class="mb-2 border p-2 rounded bg-light">
+                                <input type="text" name="transit_point[]" placeholder="Transit Point" 
+                                       class="form-control mb-1" value="<?= $t['transit_point']; ?>" required>
+                                <input type="number" name="transit_duration[]" placeholder="Duration (min)" 
+                                       class="form-control mb-1" value="<?= $t['transit_duration']; ?>" required>
+                                <input type="time" name="transit_time[]" class="form-control mb-1" 
+                                       value="<?= $t['transit_time']; ?>" required>
+                                <button type="button" class="btn btn-sm btn-danger" 
+                                        onclick="this.parentElement.remove()">Remove</button>
+                            </div>
+                            <?php 
+                            $transit_idx++;
+                            endwhile; ?>
+                        </div>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" 
+                                onclick="addEditTransit(<?= $way['id']; ?>)">+ Add Transit</button>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" name="edit_way" class="btn btn-warning">Update Way</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Delete Way Modal -->
+        <div class="modal fade" id="deleteWayModal<?= $way['id']; ?>" tabindex="-1">
+            <div class="modal-dialog">
+                <form method="POST" class="modal-content">
+                    <input type="hidden" name="way_id" value="<?= $way['id']; ?>">
+                    <div class="modal-header bg-danger text-white">
+                        <h5>Delete Way</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>Are you sure you want to delete this way?</p>
+                        <div class="alert alert-warning">
+                            <strong>Vehicle:</strong> <?= $way['vehicle_number']; ?><br>
+                            <strong>Route:</strong> <?= $way['origin']; ?> → <?= $way['destination']; ?><br>
+                            <strong>Price:</strong> Rs. <?= number_format($way['price'], 2); ?>
+                        </div>
+                        <p class="text-danger"><small><i class="fas fa-exclamation-triangle"></i> This action cannot be undone. All transit points will also be deleted.</small></p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" name="delete_way" class="btn btn-danger">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <?php endwhile; ?>
     </tbody>
 </table>
@@ -186,6 +353,17 @@ function addTransit() {
 
 function removeTransit(index) {
     document.getElementById('transitRow' + index).remove();
+}
+
+function addEditTransit(wayId) {
+    const container = document.getElementById('editTransitContainer' + wayId);
+    const html = `<div class="mb-2 border p-2 rounded bg-light">
+            <input type="text" name="transit_point[]" placeholder="Transit Point" class="form-control mb-1" required>
+            <input type="number" name="transit_duration[]" placeholder="Duration (min)" class="form-control mb-1" required>
+            <input type="time" name="transit_time[]" class="form-control mb-1" required>
+            <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">Remove</button>
+        </div>`;
+    container.insertAdjacentHTML('beforeend', html);
 }
 </script>
 

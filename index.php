@@ -1,10 +1,16 @@
+<?php
+session_start();
+
+$showSignup = isset($_SESSION['show_signup']) ? $_SESSION['show_signup'] : false;
+unset($_SESSION['show_signup']);
+?>
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Transportation Management System</title>
+    <title>Vehicle Booking System</title>
     <style>
     * {
         margin: 0;
@@ -29,6 +35,7 @@
         display: flex;
         min-height: 100vh;
         align-items: center;
+        justify-content: center;
     }
 
     .left-panel {
@@ -114,6 +121,14 @@
         outline: none;
     }
 
+    input.invalid {
+        border-color: #ef4444;
+    }
+
+    input.valid {
+        border-color: #10b981;
+    }
+
     .error-message {
         color: #ef4444;
         font-size: 14px;
@@ -134,8 +149,14 @@
         transition: background-color 0.3s;
     }
 
-    .btn:hover {
+    .btn:hover:not(:disabled) {
         background-color: #1e40af;
+    }
+
+    .btn:disabled {
+        background-color: #9ca3af;
+        cursor: not-allowed;
+        opacity: 0.6;
     }
 
     .form-footer {
@@ -169,6 +190,89 @@
         text-decoration: underline;
     }
 
+    .toggle-btn:hover {
+        color: #1e40af;
+    }
+
+    .password-requirements {
+        margin-top: 10px;
+        padding: 12px;
+        background-color: #f9fafb;
+        border-radius: 6px;
+        border: 1px solid #e5e7eb;
+        display: none;
+    }
+
+    .password-requirements.show {
+        display: block;
+    }
+
+    .password-requirements h4 {
+        font-size: 13px;
+        margin-bottom: 8px;
+        color: #374151;
+        font-weight: 600;
+    }
+
+    .requirement {
+        display: flex;
+        align-items: center;
+        font-size: 13px;
+        margin: 6px 0;
+        color: #6b7280;
+    }
+
+    .requirement::before {
+        content: "✗";
+        margin-right: 8px;
+        color: #ef4444;
+        font-weight: bold;
+        font-size: 14px;
+    }
+
+    .requirement.valid {
+        color: #059669;
+    }
+
+    .requirement.valid::before {
+        content: "✓";
+        color: #059669;
+    }
+
+    .message {
+        padding: 15px 20px;
+        margin: 20px auto;
+        border-radius: 8px;
+        max-width: 500px;
+        text-align: center;
+        font-weight: 500;
+        animation: slideDown 0.4s ease-out;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            transform: translateY(-20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .message.success {
+        background-color: #d1fae5;
+        color: #065f46;
+        border: 2px solid #10b981;
+    }
+
+    .message.error {
+        background-color: #fee2e2;
+        color: #991b1b;
+        border: 2px solid #ef4444;
+    }
+
     @media (min-width: 992px) {
         .left-panel {
             display: flex;
@@ -178,95 +282,89 @@
 </head>
 
 <body>
-    <div class="container">
+    
+    <?php
+    if (isset($_SESSION['error'])) {
+        echo '<div class="message error">' . htmlspecialchars($_SESSION['error']) . '</div>';
+        unset($_SESSION['error']);
+    }
 
+    if (isset($_SESSION['message'])) {
+        echo '<div class="message success">' . htmlspecialchars($_SESSION['message']) . '</div>';
+        unset($_SESSION['message']);
+    }
+    ?>
 
-        <div class="auth-container" id="login-container">
-            <div class="left-panel">
-                <div class="left-content">
-                    <h1>Transportation Management System</h1>
-                    <p>“Efficiency in transportation is not just about speed, but about smart management.”</p>
-                    <div class="features">
-                        <p>✓ User Management</p>
-                        <p>✓ Vehicle Management</p>
-                        <p>✓ Booking and Ticketing</p>
-                        <p>✓ Fare Management</p>
+    <div class="auth-container" id="login-container" style="display: <?php echo $showSignup ? 'none' : 'flex'; ?>;">
+        <div class="right-panel">
+            <div class="auth-form">
+                <h2>Welcome Back</h2>
+                <p class="subtitle">Vehicle Booking System</p>
+             
+                <form id="login-form" method="POST" action="server.php">
+                    <div class="form-group">
+                        <label for="login-email">Email Address</label>
+                        <input type="email" id="login-email" name="email" placeholder="Enter your email" required>
                     </div>
-                </div>
-            </div>
-            <div class="right-panel">
-                <div class="auth-form">
-                    <h2>Welcome Back</h2>
-                    <p class="subtitle">Log in to access transportation management system</p>
-                    <!-- LOGIN FORM -->
-                    <form id="login-form" method="POST" action="server.php">
-                        <div class="form-group">
-                            <label for="login-email">Email Address</label>
-                            <input type="email" id="login-email" name="email" placeholder="Enter your email" required>
-                        </div>
 
-                        <div class="form-group">
-                            <label for="login-password">Password</label>
-                            <input type="password" id="login-password" name="password" placeholder="Enter your password"
-                                required>
-                        </div>
-
-                        <div class="form-group">
-                            <button type="submit" class="btn" name="login">Log In</button>
-                        </div>
-                    </form>
-
-                    <div class="toggle-forms">
-                        <p>Don't have an account? <button class="toggle-btn" onclick="showSignup()">Sign Up</button></p>
+                    <div class="form-group">
+                        <label for="login-password">Password</label>
+                        <input type="password" id="login-password" name="password" placeholder="Enter your password"
+                            required>
                     </div>
+
+                    <div class="form-group">
+                        <button type="submit" class="btn" name="login">Log In</button>
+                    </div>
+                </form>
+
+                <div class="toggle-forms">
+                    <p>Don't have an account? <button class="toggle-btn" onclick="showSignup()">Sign Up</button></p>
                 </div>
             </div>
         </div>
+    </div>
 
+    <div class="auth-container" id="signup-container" style="display: <?php echo $showSignup ? 'flex' : 'none'; ?>;">
+        <div class="right-panel">
+            <div class="auth-form">
+                <h2>Create Account</h2>
+                <p class="subtitle">Set up your Vehicle Booking account</p>
 
-        <div class="auth-container" id="signup-container" style="display: none;">
-            <div class="left-panel">
-                <div class="left-content">
-                    <h1>Transportation Management System</h1>
-                    <p>“From booking to billing—simplify your transport operations.”</p>
-                    <div class="features">
-                        <p>✓ Booking and Ticketing</p>
-                        <p>✓ Fare Details</p>
-                        <p>✓ Cancel Booking</p>
+                <form id="signup-form" method="POST" action="server.php" onsubmit="return validateSignupForm()">
+                    <div class="form-group">
+                        <label for="full-name">Full Name</label>
+                        <input type="text" id="full-name" name="name" placeholder="Enter your full name" required>
                     </div>
-                </div>
-            </div>
-            <div class="right-panel">
-                <div class="auth-form">
-                    <h2>Create Account</h2>
-                    <p class="subtitle">Set up your transportation management account</p>
-                    <!-- SIGNUP FORM -->
-                    <form id="signup-form" method="POST" action="server.php">
-                        <div class="form-group">
-                            <label for="full-name">Full Name</label>
-                            <input type="text" id="full-name" name="name" placeholder="Enter your full name" required>
-                        </div>
 
-                        <div class="form-group">
-                            <label for="signup-email">Email Address</label>
-                            <input type="email" id="signup-email" name="email" placeholder="Enter your email" required>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="signup-password">Password</label>
-                            <input type="password" id="signup-password" name="password" placeholder="Create a password"
-                                required>
-                        </div>
-
-                        <div class="form-group">
-                            <button type="submit" class="btn" name="signup">Create Account</button>
-                        </div>
-                    </form>
-
-                    <div class="toggle-forms">
-                        <p>Already have an account? <button class="toggle-btn" onclick="showLogin()">Sign In</button>
-                        </p>
+                    <div class="form-group">
+                        <label for="signup-email">Email Address</label>
+                        <input type="email" id="signup-email" name="email" placeholder="Enter your email" required>
                     </div>
+
+                    <div class="form-group">
+                        <label for="signup-password">Password</label>
+                        <input type="password" id="signup-password" name="password" placeholder="Create a password"
+                            required>
+                        
+                        <div class="password-requirements" id="password-requirements">
+                            <h4>Password must contain:</h4>
+                            <div class="requirement" id="req-length">At least 8 characters</div>
+                            <div class="requirement" id="req-uppercase">One uppercase letter (A-Z)</div>
+                            <div class="requirement" id="req-lowercase">One lowercase letter (a-z)</div>
+                            <div class="requirement" id="req-number">One number (0-9)</div>
+                            <div class="requirement" id="req-special">One special character (!@#$%^&*)</div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <button type="submit" class="btn" name="signup" id="signup-btn" disabled>Create Account</button>
+                    </div>
+                </form>
+
+                <div class="toggle-forms">
+                    <p>Already have an account? <button class="toggle-btn" onclick="showLogin()">Sign In</button>
+                    </p>
                 </div>
             </div>
         </div>
@@ -281,7 +379,117 @@
     function showLogin() {
         document.getElementById('signup-container').style.display = 'none';
         document.getElementById('login-container').style.display = 'flex';
+
+        document.getElementById('signup-form').reset();
+        document.getElementById('password-requirements').classList.remove('show');
+        document.getElementById('signup-btn').disabled = true;
     }
+
+    const passwordInput = document.getElementById('signup-password');
+    const requirementsBox = document.getElementById('password-requirements');
+    const signupBtn = document.getElementById('signup-btn');
+
+    const requirements = {
+        length: document.getElementById('req-length'),
+        uppercase: document.getElementById('req-uppercase'),
+        lowercase: document.getElementById('req-lowercase'),
+        number: document.getElementById('req-number'),
+        special: document.getElementById('req-special')
+    };
+
+    let checks = {
+        length: false,
+        uppercase: false,
+        lowercase: false,
+        number: false,
+        special: false
+    };
+
+    passwordInput.addEventListener('focus', function() {
+        requirementsBox.classList.add('show');
+    });
+
+    passwordInput.addEventListener('input', function() {
+        const password = this.value;
+        
+        checks = {
+            length: password.length >= 8,
+            uppercase: /[A-Z]/.test(password),
+            lowercase: /[a-z]/.test(password),
+            number: /[0-9]/.test(password),
+            special: /[!@#$%^&*(),.?":{}|<>]/.test(password)
+        };
+
+        for (let key in checks) {
+            if (checks[key]) {
+                requirements[key].classList.add('valid');
+            } else {
+                requirements[key].classList.remove('valid');
+            }
+        }
+
+        const allValid = Object.values(checks).every(check => check === true);
+        if (password.length > 0) {
+            if (allValid) {
+                passwordInput.classList.remove('invalid');
+                passwordInput.classList.add('valid');
+            } else {
+                passwordInput.classList.remove('valid');
+                passwordInput.classList.add('invalid');
+            }
+        } else {
+            passwordInput.classList.remove('valid', 'invalid');
+        }
+
+        signupBtn.disabled = !allValid;
+    });
+
+    function validateSignupForm() {
+        const password = passwordInput.value;
+        
+        if (!checks.length) {
+            alert('Password must be at least 8 characters long.');
+            return false;
+        }
+        if (!checks.uppercase) {
+            alert('Password must contain at least one uppercase letter.');
+            return false;
+        }
+        if (!checks.lowercase) {
+            alert('Password must contain at least one lowercase letter.');
+            return false;
+        }
+        if (!checks.number) {
+            alert('Password must contain at least one number.');
+            return false;
+        }
+        if (!checks.special) {
+            alert('Password must contain at least one special character.');
+            return false;
+        }
+        
+        return true;
+    }
+
+    document.addEventListener('click', function(event) {
+        if (!passwordInput.contains(event.target) && !requirementsBox.contains(event.target)) {
+            if (passwordInput.value.length === 0) {
+                requirementsBox.classList.remove('show');
+            }
+        }
+    });
+
+    const messages = document.querySelectorAll('.message');
+    messages.forEach(function(msg) {
+        setTimeout(function() {
+            msg.style.transition = 'opacity 0.3s, transform 0.3s';
+            msg.style.opacity = '0';
+            msg.style.transform = 'translateY(-10px)';
+            setTimeout(function() {
+                msg.style.display = 'none';
+            }, 300);
+        }, 6000);
+    });
     </script>
 </body>
 
