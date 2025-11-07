@@ -15,7 +15,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
 
 $userId = $_SESSION['user_id'];
 
-
+// Get user info
 $userStmt = $conn->prepare("SELECT email, name FROM users WHERE id = ?");
 $userStmt->bind_param("i", $userId);
 $userStmt->execute();
@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $wayId = intval($_POST['way_id']);
 
-   
+    // Get way and vehicle info
     $stmt = $conn->prepare("
         SELECT w.*, v.id as vehicle_id
         FROM ways w
@@ -44,19 +44,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$way) {
         die("Route not found.");
     }
-        $bookingId = 'BK' . strtoupper(uniqid());
+
+    $bookingId = 'BK' . strtoupper(uniqid());
     $vehicleId = $way['vehicle_id'];
     $origin = $way['origin'];
     $destination = $way['destination'];
-
 
     $today = date('Y-m-d');
     $departureTime = $today . ' ' . $way['departure_time'];
     $arrivalTime = $today . ' ' . $way['arrival_time'];
 
-
     $status = 'pending';
 
+    // Insert booking
     $insert = $conn->prepare("
         INSERT INTO bookings (booking_id, user_id, vehicle_id, origin, destination, departure_time, arrival_time, status)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -74,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     );
 
     if ($insert->execute()) {
-        
+        // Get transit stops
         $transitStmt = $conn->prepare("
             SELECT transit_point, transit_time, transit_duration
             FROM way_transits
@@ -97,28 +97,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $transitsHTML = "<p>No transit stops.</p>";
         }
 
-
+        // Send email using PHPMailer
         $mail = new PHPMailer(true);
 
         try {
+            $mail->SMTPDebug = 2; // Show detailed debug output
+            $mail->Debugoutput = 'html';
 
             $mail->isSMTP();
             $mail->Host = 'smtp.gmail.com';
             $mail->SMTPAuth = true;
             $mail->Username = 'bikashtransportt@gmail.com';
-            $mail->Password = 'rhhi twul ebnl bwyc'; 
+            $mail->Password = 'YOUR_APP_PASSWORD'; // Use valid App Password
             $mail->SMTPSecure = 'tls';
             $mail->Port = 587;
 
-
-            $mail->setFrom('bikashtransportt@gmail.com', 'TMS Booking');
+            $mail->setFrom('bikashtransportt@gmail.com', 'BookingNepal');
             $mail->addAddress($user['email'], $user['name']);
-
 
             $depTime = date("g:i A", strtotime($departureTime));
             $arrTime = date("g:i A", strtotime($arrivalTime));
 
-            
             $mail->isHTML(true);
             $mail->Subject = 'Your Booking is Pending - ' . $bookingId;
             $mail->Body = "
@@ -136,8 +135,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ";
 
             $mail->send();
+            echo "<p>Email sent successfully to {$user['email']}</p>";
         } catch (Exception $e) {
-            error_log("Email sending failed: " . $mail->ErrorInfo);
+            echo "<p>Email could not be sent. Mailer Error: {$mail->ErrorInfo}</p>";
         }
 
         header("Location: my_bookings.php?success=1");
@@ -148,3 +148,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 } else {
     echo "Invalid access method.";
 }
+?>

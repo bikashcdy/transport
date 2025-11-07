@@ -5,11 +5,31 @@ function pageContent()
 {
     global $conn;
 
-    // Fetching data from database using sql query 
-    $totalVehicles = $conn->query("SELECT COUNT(*) AS total FROM vehicles")->fetch_assoc()['total'];
-    $totalUsers = $conn->query("SELECT COUNT(*) AS total FROM users")->fetch_assoc()['total'];
-    $activeBookings = $conn->query("SELECT COUNT(*) AS total FROM bookings WHERE status='active'")->fetch_assoc()['total'];
-    $reports = $conn->query("SELECT COUNT(*) AS total FROM reports")->fetch_assoc()['total'];
+    // Helper function for safe SQL execution
+    function safeQuery($conn, $sql, $label)
+    {
+        $result = $conn->query($sql);
+        if (!$result) {
+            echo "<div class='alert alert-danger'>SQL Error in $label: " . htmlspecialchars($conn->error) . "</div>";
+            return ['total' => 0];
+        }
+        return $result->fetch_assoc();
+    }
+
+    // ---- Fetch Dashboard Data ----
+    $totalVehicles = safeQuery($conn, "SELECT COUNT(*) AS total FROM vehicles", "Vehicles")['total'];
+    $totalUsers = safeQuery($conn, "SELECT COUNT(*) AS total FROM users", "Users")['total'];
+    $activeBookings = safeQuery($conn, "SELECT COUNT(*) AS total FROM bookings WHERE status IN ('active','confirmed','completed')", "Active Bookings")['total'];
+    $reports = safeQuery($conn, "SELECT COUNT(*) AS total FROM reports", "Reports")['total'];
+
+    // ---- Calculate Total Revenue ----
+    // Use 'price' column for total cost and count only relevant bookings
+    $revenueQuery = "
+        SELECT IFNULL(SUM(price), 0) AS total 
+        FROM bookings 
+        WHERE status IN ('active', 'confirmed', 'completed')
+    ";
+    $totalRevenue = safeQuery($conn, $revenueQuery, "Total Revenue")['total'];
     ?>
 
 <div class="row g-4">
@@ -48,20 +68,33 @@ function pageContent()
             </div>
         </div>
     </div>
-  <!-- Reports Card -->
-   
-  <div class="col-md-3 col-sm-6">
-     <div class="card text-center shadow-sm border-0 h-100" style="background:linear-gradient(45deg,#ef4444,#f87171);color:white;"> 
-        <div class="card-body">
-             <i class="fas fa-chart-line fa-2x mb-2">
-             </i> <h5>Reports Generated</h5>
-              <h2><?= $reports; ?></h2> 
-            </div> 
-        </div> 
-   </div>
+
+    <!-- Reports Card -->
+    <div class="col-md-3 col-sm-6">
+        <div class="card text-center shadow-sm border-0 h-100"
+            style="background:linear-gradient(45deg,#ef4444,#f87171);color:white;">
+            <div class="card-body">
+                <i class="fas fa-chart-line fa-2x mb-2"></i>
+                <h5>Reports Generated</h5>
+                <h2><?= $reports; ?></h2>
+            </div>
+        </div>
+    </div>
+
+    <!-- Total Revenue Card -->
+    <div class="col-md-3 col-sm-6">
+        <div class="card text-center shadow-sm border-0 h-100"
+            style="background:linear-gradient(45deg,#3b82f6,#60a5fa);color:white;">
+            <div class="card-body">
+                <i class="fas fa-dollar-sign fa-2x mb-2"></i>
+                <h5>Total Revenue</h5>
+                <h2>Rs <?= number_format($totalRevenue, 2); ?></h2>
+            </div>
+        </div>
+    </div>
 </div>
 
-<!-- Recent activity table  -->
+<!-- Recent Activity -->
 <div class="card mt-4 shadow-sm">
     <div class="card-header bg-white">
         <h5 class="mb-0"><i class="fas fa-history"></i> Recent Activity</h5>
@@ -71,6 +104,8 @@ function pageContent()
     </div>
 </div>
 
-<?php }
+<?php
+}
 
 include 'template.php';
+?>

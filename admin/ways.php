@@ -15,8 +15,8 @@ if (isset($_POST['add_way'])) {
     $vehicle_id = $_POST['vehicle_id'];
     $origin = $_POST['origin'];
     $destination = $_POST['destination'];
-    $departure_time = $_POST['departure_time'];
-    $arrival_time = $_POST['arrival_time'];
+    $departure_time = date('Y-m-d H:i:s', strtotime($_POST['departure_time']));
+    $arrival_time = date('Y-m-d H:i:s', strtotime($_POST['arrival_time']));
     $price = $_POST['price'];
 
     $stmt = $conn->prepare("INSERT INTO ways (vehicle_id, origin, destination, departure_time, arrival_time, price)
@@ -51,8 +51,8 @@ if (isset($_POST['edit_way'])) {
     $vehicle_id = $_POST['vehicle_id'];
     $origin = $_POST['origin'];
     $destination = $_POST['destination'];
-    $departure_time = $_POST['departure_time'];
-    $arrival_time = $_POST['arrival_time'];
+    $departure_time = date('Y-m-d H:i:s', strtotime($_POST['departure_time']));
+    $arrival_time = date('Y-m-d H:i:s', strtotime($_POST['arrival_time']));
     $price = $_POST['price'];
 
     $stmt = $conn->prepare("UPDATE ways SET vehicle_id=?, origin=?, destination=?, 
@@ -61,7 +61,6 @@ if (isset($_POST['edit_way'])) {
     $stmt->execute();
     $stmt->close();
 
-    // Delete old transits and add new ones
     $conn->query("DELETE FROM way_transits WHERE way_id=$way_id");
     
     if (isset($_POST['transit_point']) && is_array($_POST['transit_point'])) {
@@ -85,11 +84,8 @@ if (isset($_POST['edit_way'])) {
 // Handle Delete Way
 if (isset($_POST['delete_way'])) {
     $way_id = $_POST['way_id'];
-    
-    // Delete transits first (if foreign key is not set to CASCADE)
     $conn->query("DELETE FROM way_transits WHERE way_id=$way_id");
     
-    // Delete the way
     $stmt = $conn->prepare("DELETE FROM ways WHERE id=?");
     $stmt->bind_param("i", $way_id);
     $stmt->execute();
@@ -100,7 +96,7 @@ if (isset($_POST['delete_way'])) {
 }
 
 // Fetch all ways
-$waysResult = $conn->query("SELECT w.*, v.vehicle_number 
+$waysResult = $conn->query("SELECT w.*, v.vehicle_number, v.vehicle_name 
                             FROM ways w 
                             JOIN vehicles v ON w.vehicle_id = v.id
                             ORDER BY w.id DESC");
@@ -115,7 +111,8 @@ $waysResult = $conn->query("SELECT w.*, v.vehicle_number
     <thead class="table-dark">
         <tr>
             <th>ID</th>
-            <th>Vehicle</th>
+            <th>Vehicle Name</th>
+            <th>Vehicle Number</th>
             <th>Origin</th>
             <th>Destination</th>
             <th>Departure</th>
@@ -128,6 +125,7 @@ $waysResult = $conn->query("SELECT w.*, v.vehicle_number
         <?php while ($way = $waysResult->fetch_assoc()): ?>
         <tr>
             <td><?= $way['id']; ?></td>
+            <td><?= $way['vehicle_name']; ?></td>
             <td><?= $way['vehicle_number']; ?></td>
             <td><?= $way['origin']; ?></td>
             <td><?= $way['destination']; ?></td>
@@ -135,28 +133,21 @@ $waysResult = $conn->query("SELECT w.*, v.vehicle_number
             <td><?= date("Y-m-d h:i A", strtotime($way['arrival_time'])); ?></td>
             <td>Rs. <?= number_format($way['price'], 2); ?></td>
             <td>
-                <!-- Action buttons -->
                 <button class="btn btn-info btn-sm" data-bs-toggle="modal"
-                    data-bs-target="#viewWayModal<?= $way['id']; ?>">
-                    <i class="fas fa-eye"></i>
-                </button>
+                    data-bs-target="#viewWayModal<?= $way['id']; ?>"><i class="fas fa-eye"></i></button>
                 <button class="btn btn-warning btn-sm" data-bs-toggle="modal"
-                    data-bs-target="#editWayModal<?= $way['id']; ?>">
-                    <i class="fas fa-edit"></i>
-                </button>
+                    data-bs-target="#editWayModal<?= $way['id']; ?>"><i class="fas fa-edit"></i></button>
                 <button class="btn btn-danger btn-sm" data-bs-toggle="modal"
-                    data-bs-target="#deleteWayModal<?= $way['id']; ?>">
-                    <i class="fas fa-trash"></i>
-                </button>
+                    data-bs-target="#deleteWayModal<?= $way['id']; ?>"><i class="fas fa-trash"></i></button>
             </td>
         </tr>
 
-        <!-- View Way Modal -->
+        <!-- View Modal -->
         <div class="modal fade" id="viewWayModal<?= $way['id']; ?>" tabindex="-1">
             <div class="modal-dialog modal-lg">
                 <div class="modal-content p-3">
                     <h5>Way Details</h5>
-                    <p><strong>Vehicle:</strong> <?= $way['vehicle_number']; ?></p>
+                    <p><strong>Vehicle:</strong> <?= $way['vehicle_name']; ?> (<?= $way['vehicle_number']; ?>)</p>
                     <p><strong>Origin:</strong> <?= $way['origin']; ?></p>
                     <p><strong>Destination:</strong> <?= $way['destination']; ?></p>
                     <p><strong>Departure:</strong> <?= date("Y-m-d h:i A", strtotime($way['departure_time'])); ?></p>
@@ -165,14 +156,13 @@ $waysResult = $conn->query("SELECT w.*, v.vehicle_number
                     <hr>
                     <h6>Transit Points</h6>
                     <?php
-                            $tid = $way['id'];
-                            $transits = $conn->query("SELECT * FROM way_transits WHERE way_id=$tid");
-                            if ($transits->num_rows): ?>
+                        $tid = $way['id'];
+                        $transits = $conn->query("SELECT * FROM way_transits WHERE way_id=$tid");
+                        if ($transits->num_rows): ?>
                     <ul>
                         <?php while ($t = $transits->fetch_assoc()): ?>
                         <li><?= $t['transit_point']; ?> - Duration: <?= $t['transit_duration']; ?> min - Time:
-                            <?= $t['transit_time']; ?>
-                        </li>
+                            <?= $t['transit_time']; ?></li>
                         <?php endwhile; ?>
                     </ul>
                     <?php else: ?>
@@ -183,7 +173,7 @@ $waysResult = $conn->query("SELECT w.*, v.vehicle_number
             </div>
         </div>
 
-        <!-- Edit Way Modal -->
+        <!-- Edit Modal -->
         <div class="modal fade" id="editWayModal<?= $way['id']; ?>" tabindex="-1">
             <div class="modal-dialog modal-lg">
                 <form method="POST" class="modal-content">
@@ -194,15 +184,23 @@ $waysResult = $conn->query("SELECT w.*, v.vehicle_number
                     </div>
                     <div class="modal-body">
                         <div class="mb-2">
-                            <label>Vehicle</label>
-                            <select name="vehicle_id" class="form-control" required>
+                            <label>Vehicle Name</label>
+                            <select name="vehicle_id" id="vehicleSelect<?= $way['id']; ?>" class="form-control" required onchange="fillEditVehicleDetails(<?= $way['id']; ?>)">
                                 <option value="">Select Vehicle</option>
                                 <?php foreach ($vehicles as $v): ?>
-                                <option value="<?= $v['id']; ?>" <?= $v['id'] == $way['vehicle_id'] ? 'selected' : ''; ?>>
-                                    <?= $v['vehicle_number']; ?>
+                                <option value="<?= $v['id']; ?>" 
+                                        data-vehicle-number="<?= htmlspecialchars($v['vehicle_number']); ?>"
+                                        <?= $v['id'] == $way['vehicle_id'] ? 'selected' : ''; ?>>
+                                    <?= htmlspecialchars($v['vehicle_name']); ?>
                                 </option>
                                 <?php endforeach; ?>
                             </select>
+                        </div>
+                        <div class="mb-2">
+                            <label>Vehicle Number</label>
+                            <input type="text" id="vehicleNumber<?= $way['id']; ?>" 
+                                   class="form-control" 
+                                   value="<?= htmlspecialchars($way['vehicle_number']); ?>" readonly>
                         </div>
                         <div class="mb-2">
                             <label>Origin</label>
@@ -213,28 +211,24 @@ $waysResult = $conn->query("SELECT w.*, v.vehicle_number
                             <input type="text" name="destination" class="form-control" value="<?= $way['destination']; ?>" required>
                         </div>
                         <div class="mb-2">
-                            <label>Departure Date & Time</label>
+                            <label>Departure</label>
                             <input type="datetime-local" name="departure_time" class="form-control" 
                                    value="<?= date('Y-m-d\TH:i', strtotime($way['departure_time'])); ?>" required>
                         </div>
                         <div class="mb-2">
-                            <label>Arrival Date & Time</label>
+                            <label>Arrival</label>
                             <input type="datetime-local" name="arrival_time" class="form-control" 
                                    value="<?= date('Y-m-d\TH:i', strtotime($way['arrival_time'])); ?>" required>
                         </div>
                         <div class="mb-2">
                             <label>Price</label>
-                            <input type="number" step="0.01" name="price" class="form-control" 
-                                   value="<?= $way['price']; ?>" required>
+                            <input type="number" step="0.01" name="price" class="form-control" value="<?= $way['price']; ?>" required>
                         </div>
-
                         <hr>
                         <h6>Transit Points</h6>
                         <div id="editTransitContainer<?= $way['id']; ?>">
                             <?php
-                            $tid = $way['id'];
-                            $transits = $conn->query("SELECT * FROM way_transits WHERE way_id=$tid");
-                            $transit_idx = 0;
+                            $transits = $conn->query("SELECT * FROM way_transits WHERE way_id={$way['id']}");
                             while ($t = $transits->fetch_assoc()): ?>
                             <div class="mb-2 border p-2 rounded bg-light">
                                 <input type="text" name="transit_point[]" placeholder="Transit Point" 
@@ -246,9 +240,7 @@ $waysResult = $conn->query("SELECT w.*, v.vehicle_number
                                 <button type="button" class="btn btn-sm btn-danger" 
                                         onclick="this.parentElement.remove()">Remove</button>
                             </div>
-                            <?php 
-                            $transit_idx++;
-                            endwhile; ?>
+                            <?php endwhile; ?>
                         </div>
                         <button type="button" class="btn btn-outline-secondary btn-sm" 
                                 onclick="addEditTransit(<?= $way['id']; ?>)">+ Add Transit</button>
@@ -261,7 +253,7 @@ $waysResult = $conn->query("SELECT w.*, v.vehicle_number
             </div>
         </div>
 
-        <!-- Delete Way Modal -->
+        <!-- Delete Modal -->
         <div class="modal fade" id="deleteWayModal<?= $way['id']; ?>" tabindex="-1">
             <div class="modal-dialog">
                 <form method="POST" class="modal-content">
@@ -273,7 +265,7 @@ $waysResult = $conn->query("SELECT w.*, v.vehicle_number
                     <div class="modal-body">
                         <p>Are you sure you want to delete this way?</p>
                         <div class="alert alert-warning">
-                            <strong>Vehicle:</strong> <?= $way['vehicle_number']; ?><br>
+                            <strong>Vehicle:</strong> <?= $way['vehicle_name']; ?> (<?= $way['vehicle_number']; ?>)<br>
                             <strong>Route:</strong> <?= $way['origin']; ?> → <?= $way['destination']; ?><br>
                             <strong>Price:</strong> Rs. <?= number_format($way['price'], 2); ?>
                         </div>
@@ -293,7 +285,7 @@ $waysResult = $conn->query("SELECT w.*, v.vehicle_number
     </tbody>
 </table>
 
-<!-- Add Way Modal -->
+<!-- Add Modal -->
 <div class="modal fade" id="addModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <form method="POST" class="modal-content">
@@ -303,30 +295,30 @@ $waysResult = $conn->query("SELECT w.*, v.vehicle_number
             </div>
             <div class="modal-body">
                 <div class="mb-2">
-                    <label>Vehicle</label>
-                    <select name="vehicle_id" class="form-control" required>
+                    <label>Vehicle Name</label>
+                    <select name="vehicle_id" id="vehicleSelect" class="form-control" required onchange="fillVehicleDetails()">
                         <option value="">Select Vehicle</option>
                         <?php foreach ($vehicles as $v): ?>
-                        <option value="<?= $v['id']; ?>"><?= $v['vehicle_number']; ?></option>
+                        <option value="<?= $v['id']; ?>" 
+                                data-vehicle-number="<?= htmlspecialchars($v['vehicle_number']); ?>">
+                            <?= htmlspecialchars($v['vehicle_name']); ?>
+                        </option>
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="mb-2"><label>Origin</label><input type="text" name="origin" class="form-control" required>
+                <div class="mb-2">
+                    <label>Vehicle Number</label>
+                    <input type="text" id="vehicleNumber" class="form-control" readonly>
                 </div>
-                <div class="mb-2"><label>Destination</label><input type="text" name="destination" class="form-control"
-                        required></div>
-                <div class="mb-2"><label>Departure Date & Time</label><input type="datetime-local" name="departure_time"
-                        class="form-control" required></div>
-                <div class="mb-2"><label>Arrival Date & Time</label><input type="datetime-local" name="arrival_time"
-                        class="form-control" required></div>
-                <div class="mb-2"><label>Price</label><input type="number" step="0.01" name="price" class="form-control"
-                        required></div>
-
+                <div class="mb-2"><label>Origin</label><input type="text" name="origin" class="form-control" required></div>
+                <div class="mb-2"><label>Destination</label><input type="text" name="destination" class="form-control" required></div>
+                <div class="mb-2"><label>Departure</label><input type="datetime-local" name="departure_time" class="form-control" required></div>
+                <div class="mb-2"><label>Arrival</label><input type="datetime-local" name="arrival_time" class="form-control" required></div>
+                <div class="mb-2"><label>Price</label><input type="number" step="0.01" name="price" class="form-control" required></div>
                 <hr>
                 <h6>Transit Points</h6>
                 <div id="transitContainer"></div>
-                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addTransit()">+ Add
-                    Transit</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addTransit()">+ Add Transit</button>
             </div>
             <div class="modal-footer">
                 <button type="submit" name="add_way" class="btn btn-primary">Save Way</button>
@@ -364,6 +356,22 @@ function addEditTransit(wayId) {
             <button type="button" class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">Remove</button>
         </div>`;
     container.insertAdjacentHTML('beforeend', html);
+}
+
+// Auto-fill for add modal
+function fillVehicleDetails() {
+    const select = document.getElementById('vehicleSelect');
+    const selectedOption = select.options[select.selectedIndex];
+    const vehicleNumber = selectedOption.getAttribute('data-vehicle-number') || '';
+    document.getElementById('vehicleNumber').value = vehicleNumber;
+}
+
+// Auto-fill for edit modal
+function fillEditVehicleDetails(wayId) {
+    const select = document.getElementById('vehicleSelect' + wayId);
+    const selectedOption = select.options[select.selectedIndex];
+    const vehicleNumber = selectedOption.getAttribute('data-vehicle-number') || '';
+    document.getElementById('vehicleNumber' + wayId).value = vehicleNumber;
 }
 </script>
 

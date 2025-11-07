@@ -1,0 +1,14 @@
+.table th {
+    background-color: #007bff;
+    color: white;
+    text-align: center;
+}
+
+.table td, .table th {
+    vertical-align: middle;
+    text-align: center;
+}
+
+.btn-sm {
+    margin: 2px;
+}

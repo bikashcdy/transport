@@ -1,6 +1,5 @@
 <?php
 $pageTitle = "Bookings";
-
 include '../db.php';
 
 // Include PHPMailer classes
@@ -11,24 +10,36 @@ require '../libs/PHPMailer/src/Exception.php';
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
-// Initialize search variable
 $search = '';
 
-// Handle Update Status
+// =========================
+// 🧩 HANDLE DELETE BOOKING
+// =========================
+if (isset($_POST['delete_booking'])) {
+    $booking_id = intval($_POST['booking_id']);
+    $delete = $conn->prepare("DELETE FROM bookings WHERE booking_id = ?");
+    $delete->bind_param("i", $booking_id);
+    if ($delete->execute()) {
+        echo "<script>alert('Booking deleted successfully!'); window.location='bookings.php';</script>";
+        exit;
+    } else {
+        echo "<script>alert('Error deleting booking.'); window.location='bookings.php';</script>";
+        exit;
+    }
+}
+
+// =========================
+// 🧩 HANDLE STATUS UPDATE
+// =========================
 if (isset($_POST['update_status'])) {
     $booking_id = $_POST['booking_id'];
     $status = $_POST['status'];
 
-    // Update the status in the database
     $conn->query("UPDATE bookings SET status='$status' WHERE booking_id='$booking_id'");
 
-    // If status is confirmed, send an email
     if ($status == 'confirmed') {
-        // Fetch user details
         $userResult = $conn->query("SELECT name, email FROM users WHERE id = (SELECT user_id FROM bookings WHERE booking_id = '$booking_id')");
         $user = $userResult->fetch_assoc();
-
-        // Send email confirmation
         sendBookingConfirmationEmail($user['email'], $user['name'], $booking_id);
     }
 
@@ -36,57 +47,78 @@ if (isset($_POST['update_status'])) {
     exit();
 }
 
-// Search by Booking ID
+// =========================
+// 🔍 SEARCH HANDLING
+// =========================
 if (isset($_POST['search'])) {
-    $search = mysqli_real_escape_string($conn, $_POST['search']);  // Sanitize input
-    $result = $conn->query("
-    SELECT bookings.booking_id, bookings.user_id, bookings.vehicle_id, bookings.origin, bookings.destination, 
-           bookings.departure_time, bookings.arrival_time, 
-           (SELECT ways.price 
-            FROM ways 
-            WHERE ways.vehicle_id = bookings.vehicle_id 
-              AND ways.origin = bookings.origin 
-              AND ways.destination = bookings.destination
-            LIMIT 1) AS price, 
-           bookings.status, 
-           users.name AS user_name, users.email AS user_email
-    FROM bookings
-    LEFT JOIN users ON bookings.user_id = users.id
-    WHERE bookings.booking_id LIKE '%$search%'
-    ORDER BY bookings.departure_time DESC
-");
-} else {
-    $result = $conn->query("
-    SELECT bookings.booking_id, bookings.user_id, bookings.vehicle_id, bookings.origin, bookings.destination, 
-           bookings.departure_time, bookings.arrival_time, 
-           (SELECT ways.price 
-            FROM ways 
-            WHERE ways.vehicle_id = bookings.vehicle_id 
-              AND ways.origin = bookings.origin 
-              AND ways.destination = bookings.destination
-            LIMIT 1) AS price, 
-           bookings.status, 
-           users.name AS user_name, users.email AS user_email
-    FROM bookings
-    LEFT JOIN users ON bookings.user_id = users.id
-    WHERE bookings.booking_id LIKE '%$search%'
-    ORDER BY bookings.departure_time DESC
-");
+    $search = mysqli_real_escape_string($conn, $_POST['search']);
 }
 
+$query = "
+    SELECT bookings.booking_id, bookings.user_id, bookings.vehicle_id, bookings.origin, bookings.destination, 
+           bookings.departure_time, bookings.arrival_time, 
+           (SELECT ways.price 
+            FROM ways 
+            WHERE ways.vehicle_id = bookings.vehicle_id 
+              AND ways.origin = bookings.origin 
+              AND ways.destination = bookings.destination
+            LIMIT 1) AS price, 
+           bookings.status, 
+           users.name AS user_name, users.email AS user_email
+    FROM bookings
+    LEFT JOIN users ON bookings.user_id = users.id
+    WHERE bookings.booking_id LIKE '%$search%'
+    ORDER BY bookings.departure_time DESC
+";
+$result = $conn->query($query);
+
+// =========================
+// 📧 EMAIL FUNCTION
+// =========================
+function sendBookingConfirmationEmail($userEmail, $userName, $bookingId)
+{
+    $mail = new PHPMailer(true);
+    try {
+        $mail->isSMTP();
+        $mail->Host = 'smtp.gmail.com';
+        $mail->SMTPAuth = true;
+        $mail->Username = 'bikashtransportt@gmail.com';
+        $mail->Password = 'rhhi twul ebnl bwyc'; // App Password
+        $mail->SMTPSecure = 'tls';
+        $mail->Port = 587;
+
+        $mail->setFrom('bikashtransportt@gmail.com', 'TMS Booking');
+        $mail->addAddress($userEmail, $userName);
+
+        $mail->isHTML(true);
+        $mail->Subject = 'Booking Confirmation - ' . $bookingId;
+        $mail->Body = "
+            <h2>Booking Confirmation</h2>
+            <p>Dear $userName,</p>
+            <p>Your booking has been confirmed with the following details:</p>
+            <p><strong>Booking ID:</strong> $bookingId</p>
+            <p>Thank you for booking with us!</p>
+        ";
+
+        $mail->send();
+    } catch (Exception $e) {
+        error_log("Email could not be sent. Mailer Error: {$mail->ErrorInfo}");
+    }
+}
+
+// =========================
+// 🖥️ PAGE CONTENT
+// =========================
 function pageContent()
 {
     global $result, $search, $pageTitle;
 ?>
-
-
     <form method="POST" class="mb-4">
         <div class="input-group">
             <input type="text" class="form-control" name="search" value="<?= htmlspecialchars($search); ?>" placeholder="Search Booking ID..." required>
             <button class="btn btn-primary" type="submit">Search</button>
         </div>
     </form>
-
 
     <table class="table table-striped">
         <tr>
@@ -113,13 +145,13 @@ function pageContent()
                 <td><?= $row['destination']; ?></td>
                 <td><?= $row['departure_time']; ?></td>
                 <td><?= $row['arrival_time']; ?></td>
-                <td><?= number_format($row['price'], 2); ?></td> <!-- Price formatted correctly -->
+                <td><?= number_format($row['price'], 2); ?></td>
                 <td><?= ucfirst($row['status']); ?></td>
                 <td>
-                    
+                    <!-- View -->
                     <button class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#viewModal<?= $row['booking_id']; ?>"><i class="fas fa-eye"></i></button>
 
-                    <!-- Quick Confirm Button -->
+                    <!-- Confirm -->
                     <form method="POST" style="display:inline;">
                         <input type="hidden" name="booking_id" value="<?= $row['booking_id']; ?>">
                         <input type="hidden" name="status" value="confirmed">
@@ -128,12 +160,20 @@ function pageContent()
                         </button>
                     </form>
 
-                  
+                    <!-- Edit -->
                     <button class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#editModal<?= $row['booking_id']; ?>"><i class="fas fa-edit"></i></button>
+
+                    <!-- Delete -->
+                    <form method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this booking?');">
+                        <input type="hidden" name="booking_id" value="<?= $row['booking_id']; ?>">
+                        <button type="submit" name="delete_booking" class="btn btn-danger btn-sm" title="Delete Booking">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </form>
                 </td>
             </tr>
 
-           
+            <!-- View Modal -->
             <div class="modal fade" id="viewModal<?= $row['booking_id']; ?>" tabindex="-1">
                 <div class="modal-dialog">
                     <div class="modal-content">
@@ -160,7 +200,7 @@ function pageContent()
                 </div>
             </div>
 
-
+            <!-- Edit Modal -->
             <div class="modal fade" id="editModal<?= $row['booking_id']; ?>" tabindex="-1">
                 <div class="modal-dialog">
                     <div class="modal-content">
@@ -191,46 +231,7 @@ function pageContent()
 
         <?php endwhile; ?>
     </table>
-
 <?php
-} 
-
-
-
-
-
-function sendBookingConfirmationEmail($userEmail, $userName, $bookingId)
-{
-    $mail = new PHPMailer(true);
-    try {
-       
-        $mail->isSMTP();
-        $mail->Host = 'smtp.gmail.com';
-        $mail->SMTPAuth = true;
-        $mail->Username = 'bikashtransportt@gmail.com'; 
-        $mail->Password = 'rhhi twul ebnl bwyc';   
-        $mail->SMTPSecure = 'tls';
-        $mail->Port = 587;
-
-        
-        $mail->setFrom('bikashtransportt@gmail.com', 'TMS Booking');
-        $mail->addAddress($userEmail, $userName); 
-
-        
-        $mail->isHTML(true);
-        $mail->Subject = 'Booking Confirmation - ' . $bookingId;
-        $mail->Body = "
-            <h2>Booking Confirmation</h2>
-            <p>Dear $userName,</p>
-            <p>Your booking has been confirmed with the following details:</p>
-            <p><strong>Booking ID:</strong> $bookingId</p>
-            <p>Thank you for booking with us!</p>
-        ";
-
-        $mail->send();
-    } catch (Exception $e) {
-        error_log("Email could not be sent. Mailer Error: {$mail->ErrorInfo}");
-    }
 }
 
 include 'template.php';
