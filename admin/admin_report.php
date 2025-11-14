@@ -22,7 +22,7 @@ $result = $conn->query("
         u.email,
         COUNT(b.id) AS total_bookings, 
         COALESCE(SUM(b.price), 0) AS total_spent,
-        MAX(b.booking_date) AS last_booking
+        MAX(b.created_at) AS last_booking
     FROM users u
     LEFT JOIN bookings b ON u.id = b.user_id
     WHERE u.user_type = 'user'
@@ -107,10 +107,8 @@ function printReport() {
     </div>
 
     <div class="report-actions">
-    <button onclick="window.location.href='../admin/generate_report.php'">📄 Generate PDF</button>
-
-
+        <button onclick="window.location.href='generate_report.php'">📄 Generate PDF</button>
     </div>
-
+</div>
 </body>
 </html>

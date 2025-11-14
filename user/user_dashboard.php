@@ -8,9 +8,8 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
 require_once '../db.php';
 
 // Get search parameters
-$origin = $_GET['origin'] ?? '';
-$destination = $_GET['destination'] ?? '';
-$date = $_GET['date'] ?? date('Y-m-d');
+$date = $_GET['date'] ?? '';
+$end_date = $_GET['end_date'] ?? '';
 $type = $_GET['type'] ?? 'bus';
 
 // Validate vehicle type
@@ -19,111 +18,75 @@ if (!in_array($type, $allowedTypes)) {
     $type = 'bus';
 }
 
-// Only proceed if origin, destination, and date are provided
-if ($origin !== '' && $destination !== '' && $date !== '') {
-    // Enhanced query with more vehicle details
+$vehiclesData = [];
+$bookedVehicleIds = [];
+
+// Only proceed if dates are provided
+if ($date !== '' && $end_date !== '') {
+    // First, get all booked vehicle IDs for the date range
+    $bookedSql = "
+        SELECT DISTINCT w.vehicle_id
+        FROM ways w
+        JOIN bookings b ON w.id = b.way_id
+        WHERE b.booking_status IN ('confirmed', 'pending')
+        AND (
+            (DATE(w.trip_start) BETWEEN ? AND ?)
+            OR (DATE(w.trip_end) BETWEEN ? AND ?)
+            OR (DATE(w.trip_start) <= ? AND DATE(w.trip_end) >= ?)
+        )
+    ";
+    
+    $bookedStmt = $conn->prepare($bookedSql);
+    if ($bookedStmt) {
+        $bookedStmt->bind_param("ssssss", 
+            $date, $end_date,
+            $date, $end_date,
+            $date, $end_date
+        );
+        $bookedStmt->execute();
+        $bookedResult = $bookedStmt->get_result();
+        
+        while ($bookedRow = $bookedResult->fetch_assoc()) {
+            $bookedVehicleIds[] = $bookedRow['vehicle_id'];
+        }
+        $bookedStmt->close();
+    }
+    
+    // Query to get ALL vehicles by type with their availability status
     $sql = "
         SELECT 
-            w.id AS way_id, 
-            w.origin, 
-            w.destination, 
-            w.departure_time, 
-            w.arrival_time, 
-            w.price,
-            vt.type_name AS vehicle_type,
-            v.vehicle_name,
+            v.id,
             v.vehicle_number,
+            v.vehicle_name,
             v.capacity,
             v.facilities,
-            wt.transit_point, 
-            wt.transit_duration, 
-            wt.transit_time
-        FROM ways w
-        JOIN vehicles v ON w.vehicle_id = v.id
+            v.price,
+            v.status,
+            vt.type_name AS vehicle_type
+        FROM vehicles v
         JOIN vehicle_types vt ON v.vehicle_type_id = vt.id
-        LEFT JOIN way_transits wt ON w.id = wt.way_id
         WHERE vt.type_name = ?
+        AND v.status = 'available'
+        ORDER BY v.vehicle_name ASC
     ";
 
-    $params = [$type];
-    $types = "s";
-
-    if ($origin !== '') {
-        $sql .= " AND w.origin LIKE ?";
-        $params[] = "%$origin%";
-        $types .= "s";
-    }
-
-    if ($destination !== '') {
-        $sql .= " AND w.destination LIKE ?";
-        $params[] = "%$destination%";
-        $types .= "s";
-    }
-
-    if ($date !== '') {
-        $sql .= " AND DATE(w.departure_time) = ?";
-        $params[] = $date;
-        $types .= "s";
-    }
-
-    $sql .= " ORDER BY w.departure_time ASC";
-
-    // Execute prepared statement
     $stmt = $conn->prepare($sql);
     if ($stmt) {
-        $stmt->bind_param($types, ...$params);
+        $stmt->bind_param("s", $type);
         $stmt->execute();
         $result = $stmt->get_result();
         
-        $waysData = [];
         while ($row = $result->fetch_assoc()) {
-            $id = $row['way_id'];
-            if (!isset($waysData[$id])) {
-                $waysData[$id] = [
-                    'origin' => $row['origin'],
-                    'destination' => $row['destination'],
-                    'departure_time' => $row['departure_time'],
-                    'arrival_time' => $row['arrival_time'],
-                    'price' => $row['price'],
-                    'vehicle_type' => $row['vehicle_type'],
-                    'vehicle_name' => $row['vehicle_name'],
-                    'vehicle_number' => $row['vehicle_number'],
-                    'capacity' => $row['capacity'],
-                    'facilities' => $row['facilities'],
-                    'transits' => []
-                ];
-            }
-            if (!empty($row['transit_point'])) {
-                $waysData[$id]['transits'][] = [
-                    'point' => $row['transit_point'],
-                    'duration' => $row['transit_duration'],
-                    'time' => $row['transit_time']
-                ];
-            }
+            // Mark if vehicle is booked for selected dates
+            $row['is_booked'] = in_array($row['id'], $bookedVehicleIds);
+            $vehiclesData[] = $row;
         }
         $stmt->close();
-    } else {
-        $waysData = [];
     }
-} else {
-    $waysData = [];
 }
 
 // Get username for display
 $username = $_SESSION['username'] ?? 'User';
-
-// Function to calculate journey duration
-function calculateDuration($departure, $arrival) {
-    $dept = new DateTime($departure);
-    $arr = new DateTime($arrival);
-    $diff = $dept->diff($arr);
-    
-    if ($diff->h > 0) {
-        return $diff->h . 'h ' . $diff->i . 'm';
-    } else {
-        return $diff->i . 'm';
-    }
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -139,22 +102,58 @@ function calculateDuration($departure, $arrival) {
     <link rel="shortcut icon" href="favi.png" type="image/x-icon" />
     <link rel="stylesheet" href="route_card.css">
     <style>
-        /* Enhanced Route Card Styles */
-        .route-card {
+        /* Enhanced Vehicle Card Styles */
+        .vehicles-section {
+            padding: 40px 20px;
+            background: #f8f9fa;
+            min-height: 400px;
+        }
+
+        .vehicles-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section-header {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .section-title {
+            font-size: 2rem;
+            color: #2d3748;
+            margin-bottom: 10px;
+        }
+
+        .results-count {
+            color: #64748b;
+            font-size: 1rem;
+        }
+
+        .vehicle-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+            gap: 25px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .vehicle-card {
             background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
             border-radius: 16px;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
             overflow: hidden;
             transition: all 0.3s ease;
             border: 1px solid #e9ecef;
+            margin-bottom: 20px;
         }
 
-        .route-card:hover {
+        .vehicle-card:hover {
             transform: translateY(-5px);
             box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
         }
 
-        .route-header {
+        .vehicle-header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             padding: 20px;
@@ -170,81 +169,90 @@ function calculateDuration($departure, $arrival) {
             display: flex;
             align-items: center;
             justify-content: center;
+            font-size: 2rem;
         }
 
-        .vehicle-logo {
-            width: 40px;
-            height: 40px;
-            filter: brightness(0) invert(1);
-        }
-
-        .route-main-info {
+        .vehicle-main-info {
             flex: 1;
         }
 
-        .route-name {
+        .vehicle-name {
             font-size: 1.4rem;
             font-weight: 700;
-            margin: 0 0 5px 0;
+            margin: 0 0 8px 0;
         }
 
         .vehicle-number-badge {
             background: rgba(255, 255, 255, 0.3);
-            padding: 4px 12px;
+            padding: 6px 14px;
             border-radius: 20px;
-            font-size: 0.85rem;
+            font-size: 0.9rem;
             font-weight: 600;
             display: inline-block;
         }
 
-        .route-details {
+        .vehicle-details {
+            padding: 25px;
+        }
+
+        .date-range-display {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
             padding: 20px;
-        }
-
-        .route-journey {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 20px;
-            padding: 15px;
-            background: #f8f9fa;
             border-radius: 12px;
-        }
-
-        .journey-point {
+            margin-bottom: 20px;
             text-align: center;
-            flex: 1;
         }
 
-        .journey-time {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: #2d3748;
-            margin-bottom: 5px;
-        }
-
-        .journey-location {
+        .date-range-label {
             font-size: 0.9rem;
             color: #64748b;
-            font-weight: 500;
+            font-weight: 600;
+            margin-bottom: 8px;
         }
 
-        .journey-arrow {
-            flex: 0.5;
-            text-align: center;
+        .date-range-dates {
+            font-size: 1.1rem;
             color: #667eea;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
         }
 
-        .journey-duration {
-            font-size: 0.85rem;
-            color: #64748b;
-            display: block;
-            margin-top: 5px;
+        .status-banner {
+            padding: 12px 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            font-weight: 600;
+            font-size: 0.95rem;
         }
 
-        .route-info-grid {
+        .status-available {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            color: white;
+        }
+
+        .status-booked {
+            background: linear-gradient(135deg, #f56565 0%, #c53030 100%);
+            color: white;
+        }
+
+        .vehicle-card.booked {
+            opacity: 0.7;
+        }
+
+        .vehicle-card.booked .vehicle-header {
+            background: linear-gradient(135deg, #a0aec0 0%, #718096 100%);
+        }
+
+        .vehicle-info-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
             gap: 15px;
             margin-bottom: 20px;
         }
@@ -252,27 +260,29 @@ function calculateDuration($departure, $arrival) {
         .info-item {
             display: flex;
             align-items: center;
-            gap: 10px;
-            padding: 12px;
+            gap: 12px;
+            padding: 15px;
             background: #f8f9fa;
-            border-radius: 8px;
+            border-radius: 10px;
             transition: all 0.3s ease;
         }
 
         .info-item:hover {
             background: #e9ecef;
+            transform: translateX(5px);
         }
 
         .info-icon {
-            width: 40px;
-            height: 40px;
+            width: 45px;
+            height: 45px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.1rem;
+            font-size: 1.2rem;
+            flex-shrink: 0;
         }
 
         .info-content {
@@ -280,18 +290,18 @@ function calculateDuration($departure, $arrival) {
         }
 
         .info-label {
-            font-size: 0.75rem;
+            font-size: 0.8rem;
             color: #64748b;
             text-transform: uppercase;
             font-weight: 600;
             letter-spacing: 0.5px;
+            margin-bottom: 3px;
         }
 
         .info-value {
-            font-size: 1rem;
+            font-size: 1.1rem;
             color: #2d3748;
-            font-weight: 600;
-            margin-top: 2px;
+            font-weight: 700;
         }
 
         .facilities-section {
@@ -301,10 +311,10 @@ function calculateDuration($departure, $arrival) {
         }
 
         .facilities-title {
-            font-size: 0.9rem;
-            color: #64748b;
-            font-weight: 600;
-            margin-bottom: 12px;
+            font-size: 1rem;
+            color: #2d3748;
+            font-weight: 700;
+            margin-bottom: 15px;
             display: flex;
             align-items: center;
             gap: 8px;
@@ -313,70 +323,50 @@ function calculateDuration($departure, $arrival) {
         .facilities-list {
             display: flex;
             flex-wrap: wrap;
-            gap: 8px;
+            gap: 10px;
         }
 
         .facility-tag {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 6px 14px;
+            padding: 8px 16px;
             border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .transit-section {
-            margin-top: 15px;
-            padding: 15px;
-            background: #fff3cd;
-            border-radius: 8px;
-            border-left: 4px solid #ffc107;
-        }
-
-        .transit-title {
-            font-size: 0.9rem;
-            font-weight: 600;
-            color: #856404;
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .transit-item {
             font-size: 0.85rem;
-            color: #856404;
-            padding: 5px 0;
+            font-weight: 600;
             display: flex;
             align-items: center;
             gap: 8px;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
         }
 
         .price-section {
             background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
             color: white;
-            padding: 20px;
-            text-align: center;
-            margin: 0 20px 20px 20px;
+            padding: 25px;
+            margin: 0 25px 25px 25px;
             border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(72, 187, 120, 0.3);
+            text-align: center;
         }
 
         .price-label {
-            font-size: 0.9rem;
-            opacity: 0.9;
-            margin-bottom: 5px;
+            font-size: 1rem;
+            opacity: 0.95;
+            margin-bottom: 10px;
+            font-weight: 500;
         }
 
         .price-amount {
-            font-size: 2rem;
+            font-size: 2.2rem;
             font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
 
-        .route-footer {
-            padding: 0 20px 20px 20px;
+        .vehicle-footer {
+            padding: 0 25px 25px 25px;
         }
 
         .btn-book-now {
@@ -384,21 +374,89 @@ function calculateDuration($departure, $arrival) {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
-            padding: 15px;
-            border-radius: 10px;
-            font-size: 1.1rem;
-            font-weight: 600;
+            padding: 18px;
+            border-radius: 12px;
+            font-size: 1.15rem;
+            font-weight: 700;
             cursor: pointer;
             transition: all 0.3s ease;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
+            gap: 12px;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
         }
 
         .btn-book-now:hover {
             transform: scale(1.02);
-            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 6px 25px rgba(102, 126, 234, 0.5);
+        }
+
+        .btn-book-now:active {
+            transform: scale(0.98);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .empty-icon {
+            font-size: 4rem;
+            color: #cbd5e0;
+            margin-bottom: 20px;
+        }
+
+        .empty-state h3 {
+            font-size: 1.5rem;
+            color: #2d3748;
+            margin-bottom: 10px;
+        }
+
+        .empty-state p {
+            color: #64748b;
+            margin-bottom: 10px;
+        }
+
+        .empty-suggestion {
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .vehicle-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+
+            .vehicles-container {
+                padding: 0 10px;
+            }
+
+            .vehicle-info-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .vehicle-header {
+                padding: 15px;
+            }
+
+            .vehicle-details {
+                padding: 15px;
+            }
+
+            .price-section {
+                padding: 20px;
+                margin: 0 15px 15px 15px;
+            }
+
+            .vehicle-footer {
+                padding: 0 15px 15px 15px;
+            }
         }
 
         /* Footer Styles */
@@ -465,30 +523,36 @@ function calculateDuration($departure, $arrival) {
             margin-top: 30px;
         }
 
+        .date-group {
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+
+        .date-input-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .date-label {
+            font-size: 0.85rem;
+            color: #4a5568;
+            font-weight: 600;
+            padding-left: 5px;
+        }
+
+        .date-input-wrapper .input-group {
+            margin: 0;
+        }
+
         @media (max-width: 768px) {
-            .route-info-grid {
+            .date-group {
                 grid-template-columns: 1fr;
-            }
-
-            .route-journey {
-                flex-direction: column;
-                gap: 15px;
-            }
-
-            .journey-arrow {
-                transform: rotate(90deg);
             }
         }
     </style>
-    <script>
-        function setDate(daysFromNow) {
-            const today = new Date();
-            today.setDate(today.getDate() + daysFromNow);
-            const formattedDate = today.toISOString().split('T')[0];
-            document.getElementById('travelDate').value = formattedDate;
-            document.getElementById('searchForm').submit();
-        }
-    </script>
 </head>
 <body>
     <header class="top-header">
@@ -501,21 +565,21 @@ function calculateDuration($departure, $arrival) {
             </div>
             <nav class="nav-tabs">
                 <a
-                    href="?type=bus&origin=<?= urlencode($origin) ?>&destination=<?= urlencode($destination) ?>&date=<?= urlencode($date) ?>"
+                    href="?type=bus&date=<?= urlencode($date) ?>&end_date=<?= urlencode($end_date) ?>"
                     class="nav-link <?= $type == 'bus' ? 'active' : '' ?>"
                 >
                     <i class="fa-solid fa-bus"></i>
                     <span>Bus</span>
                 </a>
                 <a
-                    href="?type=taxi&origin=<?= urlencode($origin) ?>&destination=<?= urlencode($destination) ?>&date=<?= urlencode($date) ?>"
+                    href="?type=taxi&date=<?= urlencode($date) ?>&end_date=<?= urlencode($end_date) ?>"
                     class="nav-link <?= $type == 'taxi' ? 'active' : '' ?>"
                 >
                     <i class="fa-solid fa-taxi"></i>
                     <span>Taxi</span>
                 </a>
                 <a
-                    href="?type=micro&origin=<?= urlencode($origin) ?>&destination=<?= urlencode($destination) ?>&date=<?= urlencode($date) ?>"
+                    href="?type=micro&date=<?= urlencode($date) ?>&end_date=<?= urlencode($end_date) ?>"
                     class="nav-link <?= $type == 'micro' ? 'active' : '' ?>"
                 >
                     <i class="fa-solid fa-van-shuttle"></i>
@@ -548,240 +612,240 @@ function calculateDuration($departure, $arrival) {
             <form class="search-box" method="GET" id="searchForm">
                 <input type="hidden" name="type" value="<?= htmlspecialchars($type) ?>" />
 
-                <div class="input-group">
-                    <i class="fa-solid fa-location-dot"></i>
-                    <input
-                        type="text"
-                        name="origin"
-                        placeholder="Departure City"
-                        value="<?= htmlspecialchars($origin) ?>"
-                        autocomplete="off"
-                    />
-                </div>
-
-                <div class="input-group">
-                    <i class="fa-solid fa-location-arrow"></i>
-                    <input
-                        type="text"
-                        name="destination"
-                        placeholder="Destination City"
-                        value="<?= htmlspecialchars($destination) ?>"
-                        autocomplete="off"
-                    />
-                </div>
-
-                <div class="input-group">
-                    <i class="fa-solid fa-calendar-days"></i>
-                    <input
-                        type="date"
-                        name="date"
-                        id="travelDate"
-                        value="<?= htmlspecialchars($date) ?>"
-                        min="<?= date('Y-m-d') ?>"
-                    />
+                <div class="date-group">
+                    <div class="date-input-wrapper">
+                        <label class="date-label">Trip Starts</label>
+                        <div class="input-group">
+                            <i class="fa-solid fa-calendar-days"></i>
+                            <input
+                                type="date"
+                                name="date"
+                                id="travelDate"
+                                value="<?= htmlspecialchars($date) ?>"
+                                min="<?= date('Y-m-d') ?>"
+                                required
+                            />
+                        </div>
+                    </div>
+                    
+                    <div class="date-input-wrapper">
+                        <label class="date-label">Trip Ends</label>
+                        <div class="input-group">
+                            <i class="fa-solid fa-calendar-days"></i>
+                            <input
+                                type="date"
+                                name="end_date"
+                                id="endDate"
+                                value="<?= htmlspecialchars($end_date) ?>"
+                                min="<?= htmlspecialchars($date ?: date('Y-m-d')) ?>"
+                                required
+                            />
+                        </div>
+                    </div>
                 </div>
 
                 <div class="button-group">
-                    <button type="button" class="btn btn-today" onclick="setDate(0)">
-                        <i class="fas fa-calendar-day"></i> Today
-                    </button>
-                    <button type="button" class="btn btn-tomorrow" onclick="setDate(1)">
-                        <i class="fas fa-calendar-plus"></i> Tomorrow
-                    </button>
                     <button type="submit" class="btn btn-search">
-                        <i class="fas fa-search"></i> Search Routes
+                        <i class="fas fa-search"></i> Search Available Vehicles
                     </button>
                 </div>
             </form>
         </div>
     </section>
     
-    <section class="routes-section" id="availableWays">
-        <div class="section-header">
-            <h2 class="section-title">
-                <i class="fas fa-route"></i> Available <?= ucfirst(htmlspecialchars($type)) ?> Routes
-                <?php if ($origin || $destination): ?>
-                <span class="route-filter">
-                    <?php if ($origin): ?>from <strong><?= htmlspecialchars($origin) ?></strong><?php endif; ?>
-                    <?php if ($destination): ?>to <strong><?= htmlspecialchars($destination) ?></strong><?php endif; ?>
-                </span>
+    <section class="vehicles-section" id="availableVehicles">
+        <div class="vehicles-container">
+            <?php if ($date && $end_date): ?>
+            <div class="section-header">
+                <h2 class="section-title">
+                    <i class="fas fa-car"></i> Available <?= ucfirst(htmlspecialchars($type)) ?> Vehicles
+                </h2>
+
+                <?php if (!empty($vehiclesData)): ?>
+                <p class="results-count">
+                    <i class="fas fa-info-circle"></i>
+                    Showing <?= count($vehiclesData) ?> vehicle<?= count($vehiclesData) != 1 ? 's' : '' ?> 
+                    (<?= count(array_filter($vehiclesData, function($v) { return !$v['is_booked']; })) ?> available, 
+                    <?= count(array_filter($vehiclesData, function($v) { return $v['is_booked']; })) ?> booked)
+                </p>
+                <?php else: ?>
+                <p class="results-count">
+                    <i class="fas fa-exclamation-circle"></i> No <?= htmlspecialchars($type) ?> vehicles found.
+                </p>
                 <?php endif; ?>
-            </h2>
+            </div>
 
-            <?php if (!empty($waysData)): ?>
-            <p class="results-count">
-                <i class="fas fa-info-circle"></i>
-                Found <?= count($waysData) ?> route<?= count($waysData) != 1 ? 's' : '' ?> for
-                <?= date('M d, Y', strtotime($date)) ?>
-            </p>
-            <?php elseif ($origin && $destination && $date): ?>
-            <p class="results-count">
-                <i class="fas fa-info-circle"></i> No routes found for your selected criteria.
-            </p>
-            <?php endif; ?>
-        </div>
+            <?php if (!empty($vehiclesData)): ?>
+            <div class="vehicle-grid">
+                <?php foreach ($vehiclesData as $vehicle): ?>
+                <div class="vehicle-card <?= $vehicle['is_booked'] ? 'booked' : '' ?>">
+                    <!-- Vehicle Header -->
+                    <div class="vehicle-header">
+                        <div class="vehicle-icon">
+                            <?php if ($vehicle['vehicle_type'] == 'bus'): ?>
+                            <i class="fas fa-bus"></i>
+                            <?php elseif ($vehicle['vehicle_type'] == 'taxi'): ?>
+                            <i class="fas fa-taxi"></i>
+                            <?php elseif ($vehicle['vehicle_type'] == 'micro'): ?>
+                            <i class="fas fa-van-shuttle"></i>
+                            <?php endif; ?>
+                        </div>
+                        <div class="vehicle-main-info">
+                            <h3 class="vehicle-name"><?= htmlspecialchars($vehicle['vehicle_name']) ?></h3>
+                            <span class="vehicle-number-badge">
+                                <i class="fas fa-hashtag"></i> <?= htmlspecialchars($vehicle['vehicle_number']) ?>
+                            </span>
+                        </div>
+                    </div>
 
-        <?php if (!empty($waysData)): ?>
-        <div class="route-grid">
-            <?php foreach ($waysData as $id => $way): ?>
-            <div class="route-card">
-                <!-- Route Header -->
-                <div class="route-header">
-                    <div class="vehicle-icon">
-                        <?php if ($way['vehicle_type'] == 'bus'): ?>
-                        <i class="fas fa-bus fa-2x"></i>
-                        <?php elseif ($way['vehicle_type'] == 'taxi'): ?>
-                        <i class="fas fa-taxi fa-2x"></i>
-                        <?php elseif ($way['vehicle_type'] == 'micro'): ?>
-                        <i class="fas fa-van-shuttle fa-2x"></i>
+                    <!-- Vehicle Details -->
+                    <div class="vehicle-details">
+                        <!-- Date Range Display -->
+                        <div class="date-range-display">
+                            <div class="date-range-label">Your Booking Period</div>
+                            <div class="date-range-dates">
+                                <span><?= date('M d, Y', strtotime($date)) ?></span>
+                                <i class="fas fa-arrow-right"></i>
+                                <span><?= date('M d, Y', strtotime($end_date)) ?></span>
+                            </div>
+                        </div>
+
+                        <!-- Status Banner -->
+                        <?php if ($vehicle['is_booked']): ?>
+                        <div class="status-banner status-booked">
+                            <i class="fas fa-times-circle"></i>
+                            <span>Already Booked for These Dates</span>
+                        </div>
+                        <?php else: ?>
+                        <div class="status-banner status-available">
+                            <i class="fas fa-check-circle"></i>
+                            <span>Available for These Dates</span>
+                        </div>
+                        <?php endif; ?>
+
+                        <!-- Info Grid -->
+                        <div class="vehicle-info-grid">
+                            <div class="info-item">
+                                <div class="info-icon">
+                                    <i class="fas fa-users"></i>
+                                </div>
+                                <div class="info-content">
+                                    <div class="info-label">Capacity</div>
+                                    <div class="info-value"><?= htmlspecialchars($vehicle['capacity']) ?> Seats</div>
+                                </div>
+                            </div>
+
+                            <div class="info-item">
+                                <div class="info-icon">
+                                    <i class="fas fa-car"></i>
+                                </div>
+                                <div class="info-content">
+                                    <div class="info-label">Type</div>
+                                    <div class="info-value"><?= ucfirst(htmlspecialchars($vehicle['vehicle_type'])) ?></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Facilities -->
+                        <?php if (!empty($vehicle['facilities'])): ?>
+                        <div class="facilities-section">
+                            <div class="facilities-title">
+                                <i class="fas fa-star"></i> Facilities & Amenities
+                            </div>
+                            <div class="facilities-list">
+                                <?php 
+                                $facilities = explode(',', $vehicle['facilities']);
+                                foreach ($facilities as $facility): 
+                                    $facility = trim($facility);
+                                    if (empty($facility)) continue;
+                                    
+                                    $icon = 'fa-check-circle';
+                                    if (stripos($facility, 'ac') !== false || stripos($facility, 'air') !== false) {
+                                        $icon = 'fa-snowflake';
+                                    } elseif (stripos($facility, 'wifi') !== false) {
+                                        $icon = 'fa-wifi';
+                                    } elseif (stripos($facility, 'charging') !== false || stripos($facility, 'usb') !== false) {
+                                        $icon = 'fa-plug';
+                                    } elseif (stripos($facility, 'water') !== false) {
+                                        $icon = 'fa-bottle-water';
+                                    } elseif (stripos($facility, 'tv') !== false || stripos($facility, 'screen') !== false) {
+                                        $icon = 'fa-tv';
+                                    }
+                                ?>
+                                <span class="facility-tag">
+                                    <i class="fas <?= $icon ?>"></i>
+                                    <?= htmlspecialchars($facility) ?>
+                                </span>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
                         <?php endif; ?>
                     </div>
-                    <div class="route-main-info">
-                        <h3 class="route-name"><?= htmlspecialchars($way['vehicle_name']) ?></h3>
-                        <span class="vehicle-number-badge">
-                            <i class="fas fa-hashtag"></i> <?= htmlspecialchars($way['vehicle_number']) ?>
-                        </span>
-                    </div>
-                </div>
 
-                <!-- Route Details -->
-                <div class="route-details">
-                    <!-- Journey Timeline -->
-                    <div class="route-journey">
-                        <div class="journey-point">
-                            <div class="journey-time"><?= date('H:i', strtotime($way['departure_time'])) ?></div>
-                            <div class="journey-location"><?= htmlspecialchars($way['origin']) ?></div>
-                        </div>
-                        <div class="journey-arrow">
-                            <i class="fas fa-arrow-right fa-2x"></i>
-                            <span class="journey-duration">
-                                <?= calculateDuration($way['departure_time'], $way['arrival_time']) ?>
-                            </span>
-                        </div>
-                        <div class="journey-point">
-                            <div class="journey-time"><?= date('H:i', strtotime($way['arrival_time'])) ?></div>
-                            <div class="journey-location"><?= htmlspecialchars($way['destination']) ?></div>
+                    <!-- Price Section -->
+                    <div class="price-section">
+                        <div class="price-label">Total Price</div>
+                        <div class="price-amount">
+                            Rs. <?= number_format($vehicle['price'], 2) ?>
                         </div>
                     </div>
 
-                    <!-- Info Grid -->
-                    <div class="route-info-grid">
-                        <div class="info-item">
-                            <div class="info-icon">
-                                <i class="fas fa-users"></i>
-                            </div>
-                            <div class="info-content">
-                                <div class="info-label">Capacity</div>
-                                <div class="info-value"><?= htmlspecialchars($way['capacity']) ?> Seats</div>
-                            </div>
-                        </div>
-
-                        <div class="info-item">
-                            <div class="info-icon">
-                                <i class="fas fa-car"></i>
-                            </div>
-                            <div class="info-content">
-                                <div class="info-label">Vehicle Type</div>
-                                <div class="info-value"><?= ucfirst(htmlspecialchars($way['vehicle_type'])) ?></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Facilities -->
-                    <?php if (!empty($way['facilities'])): ?>
-                    <div class="facilities-section">
-                        <div class="facilities-title">
-                            <i class="fas fa-star"></i> Facilities & Amenities
-                        </div>
-                        <div class="facilities-list">
-                            <?php 
-                            $facilities = explode(',', $way['facilities']);
-                            foreach ($facilities as $facility): 
-                                $facility = trim($facility);
-                                $icon = 'fa-check-circle';
-                                if (stripos($facility, 'ac') !== false || stripos($facility, 'air') !== false) {
-                                    $icon = 'fa-snowflake';
-                                } elseif (stripos($facility, 'wifi') !== false) {
-                                    $icon = 'fa-wifi';
-                                } elseif (stripos($facility, 'charging') !== false || stripos($facility, 'usb') !== false) {
-                                    $icon = 'fa-plug';
-                                } elseif (stripos($facility, 'water') !== false) {
-                                    $icon = 'fa-bottle-water';
-                                } elseif (stripos($facility, 'tv') !== false || stripos($facility, 'screen') !== false) {
-                                    $icon = 'fa-tv';
-                                }
-                            ?>
-                            <span class="facility-tag">
-                                <i class="fas <?= $icon ?>"></i>
-                                <?= htmlspecialchars($facility) ?>
-                            </span>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                    <?php endif; ?>
-
-                    <!-- Transit Points -->
-                    <?php if (!empty($way['transits'])): ?>
-                    <div class="transit-section">
-                        <div class="transit-title">
-                            <i class="fas fa-route"></i> Transit Points
-                        </div>
-                        <?php foreach ($way['transits'] as $transit): ?>
-                        <div class="transit-item">
-                            <i class="fas fa-map-marker-alt"></i>
-                            <strong><?= htmlspecialchars($transit['point']) ?></strong>
-                            <?php if ($transit['time']): ?>
-                                - <?= date('H:i', strtotime($transit['time'])) ?>
-                            <?php endif; ?>
-                            <?php if ($transit['duration']): ?>
-                                (<?= htmlspecialchars($transit['duration']) ?> min stop)
-                            <?php endif; ?>
-                        </div>
-                        <?php endforeach; ?>
-                    </div>
-                    <?php endif; ?>
-                </div>
-
-                <!-- Price Section -->
-                <div class="price-section">
-                    <div class="price-label">Total Fare</div>
-                    <div class="price-amount">NPR <?= number_format($way['price'], 2) ?></div>
-                </div>
-
-                <!-- Booking Button -->
-                <div class="route-footer">
-                    <form action="user_booking.php" method="POST">
-                        <input type="hidden" name="way_id" value="<?= $id ?>" />
-                        <input type="hidden" name="travel_date" value="<?= htmlspecialchars($date) ?>" />
-                        <button type="submit" class="btn-book-now">
-                            <i class="fas fa-ticket-alt"></i> Book Now
+                    <!-- Booking Button -->
+                    <div class="vehicle-footer">
+                        <?php if ($vehicle['is_booked']): ?>
+                        <button class="btn-book-now" style="background: linear-gradient(135deg, #a0aec0 0%, #718096 100%); cursor: not-allowed;" disabled>
+                            <i class="fas fa-ban"></i> Not Available
                         </button>
-                    </form>
+                        <?php else: ?>
+                        <form action="user_booking.php" method="POST">
+                            <input type="hidden" name="vehicle_id" value="<?= $vehicle['id'] ?>" />
+                            <input type="hidden" name="start_date" value="<?= htmlspecialchars($date) ?>" />
+                            <input type="hidden" name="end_date" value="<?= htmlspecialchars($end_date) ?>" />
+                            <button type="submit" class="btn-book-now">
+                                <i class="fas fa-ticket-alt"></i> Book This Vehicle
+                            </button>
+                        </form>
+                        <?php endif; ?>
+                    </div>
                 </div>
+                <?php endforeach; ?>
             </div>
-            <?php endforeach; ?>
-        </div>
-        <?php else: ?>
-        <div class="empty-state">
-            <div class="empty-icon">
-                <i class="fas fa-search"></i>
+            <?php else: ?>
+            <div class="empty-state">
+                <div class="empty-icon">
+                    <i class="fas fa-calendar-times"></i>
+                </div>
+                <h3>No Vehicles Available</h3>
+                <p>
+                    Sorry, all <?= htmlspecialchars($type) ?> vehicles are booked for the selected dates.
+                </p>
+                <p class="empty-suggestion">
+                    Try selecting different dates or check other vehicle types.
+                </p>
             </div>
-            <h3>No Routes Found</h3>
-            <p>
-                We couldn't find any <?= htmlspecialchars($type) ?> routes matching your search criteria.
-            </p>
-            <p class="empty-suggestion">
-                Try adjusting your search filters or selecting a different date.
-            </p>
+            <?php endif; ?>
+            
+            <?php else: ?>
+            <div class="empty-state">
+                <div class="empty-icon">
+                    <i class="fas fa-search"></i>
+                </div>
+                <h3>Search for Available Vehicles</h3>
+                <p>
+                    Please select your trip start and end dates above to view available vehicles.
+                </p>
+                <p class="empty-suggestion">
+                    <i class="fas fa-arrow-up"></i> Use the search form to get started
+                </p>
+            </div>
+            <?php endif; ?>
         </div>
-        <?php endif; ?>
     </section>
 
     <footer class="site-footer">
         <div class="footer-container">
             <div class="footer-contact">
                 <h3>Contact Us</h3>
-                <p>BookingNepal Transport Solutions</p>
                 <p>Email: <a href="mailto:bikashtransportt@gmail.com">bikashtransportt@gmail.com</a></p>
                 <p>Phone: <a href="tel:9748777251">9748777251</a></p>
                 <p>Address: Butwal-10, Rupandehi, Nepal</p>
@@ -803,5 +867,15 @@ function calculateDuration($departure, $arrival) {
             &copy; <?= date('Y') ?> BookingNepal. All Rights Reserved.
         </div>
     </footer>
+
+    <script>
+        // Update end date minimum when start date changes
+        document.getElementById('travelDate').addEventListener('change', function() {
+            document.getElementById('endDate').min = this.value;
+            if (document.getElementById('endDate').value && document.getElementById('endDate').value < this.value) {
+                document.getElementById('endDate').value = this.value;
+            }
+        });
+    </script>
 </body>
 </html>

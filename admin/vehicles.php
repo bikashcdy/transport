@@ -8,12 +8,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add'])) {
     $vehicle_name = trim($_POST['vehicle_name']);
     $vehicle_type_id = intval($_POST['vehicle_type_id']);
     $capacity = intval($_POST['capacity']);
+    $price = floatval($_POST['price']);
     $status = trim($_POST['status']);
     $facilities = isset($_POST['facilities']) ? implode(', ', $_POST['facilities']) : '';
 
-    $stmt = $conn->prepare("INSERT INTO vehicles (vehicle_number, vehicle_name, vehicle_type_id, capacity, facilities, status) VALUES (?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("ssiiss", $vehicle_number, $vehicle_name, $vehicle_type_id, $capacity, $facilities, $status);
-    $stmt->execute();
+    $sql = "INSERT INTO vehicles (vehicle_number, vehicle_name, vehicle_type_id, capacity, price, facilities, status) VALUES (?, ?, ?, ?, ?, ?, ?)";
+    $stmt = $conn->prepare($sql);
+    
+    if ($stmt === false) {
+        die("SQL Prepare Error: " . $conn->error);
+    }
+    
+    $stmt->bind_param("ssiidss", $vehicle_number, $vehicle_name, $vehicle_type_id, $capacity, $price, $facilities, $status);
+    
+    if (!$stmt->execute()) {
+        die("Execute Error: " . $stmt->error);
+    }
+    
     $stmt->close();
 
     header("Location: vehicles.php");
@@ -27,12 +38,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update'])) {
     $vehicle_name = trim($_POST['vehicle_name']);
     $vehicle_type_id = intval($_POST['vehicle_type_id']);
     $capacity = intval($_POST['capacity']);
+    $price = floatval($_POST['price']);
     $status = trim($_POST['status']);
     $facilities = isset($_POST['facilities']) ? implode(', ', $_POST['facilities']) : '';
 
-    $stmt = $conn->prepare("UPDATE vehicles SET vehicle_number=?, vehicle_name=?, vehicle_type_id=?, capacity=?, facilities=?, status=? WHERE id=?");
-    $stmt->bind_param("ssiissi", $vehicle_number, $vehicle_name, $vehicle_type_id, $capacity, $facilities, $status, $id);
-    $stmt->execute();
+    $sql = "UPDATE vehicles SET vehicle_number=?, vehicle_name=?, vehicle_type_id=?, capacity=?, price=?, facilities=?, status=? WHERE id=?";
+    $stmt = $conn->prepare($sql);
+    
+    if ($stmt === false) {
+        die("SQL Prepare Error: " . $conn->error);
+    }
+    
+    $stmt->bind_param("ssiidssi", $vehicle_number, $vehicle_name, $vehicle_type_id, $capacity, $price, $facilities, $status, $id);
+    
+    if (!$stmt->execute()) {
+        die("Execute Error: " . $stmt->error);
+    }
+    
     $stmt->close();
 
     header("Location: vehicles.php");
@@ -47,11 +69,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete'])) {
     $conn->query("DELETE FROM ways WHERE vehicle_id = $id");
 
     // Delete vehicle
-    $stmt = $conn->prepare("DELETE FROM vehicles WHERE id = ?");
-    $stmt->bind_param("i", $id);
-    if (!$stmt->execute()) {
-        die("Error deleting vehicle: " . $stmt->error);
+    $sql = "DELETE FROM vehicles WHERE id = ?";
+    $stmt = $conn->prepare($sql);
+    
+    if ($stmt === false) {
+        die("SQL Prepare Error: " . $conn->error);
     }
+    
+    $stmt->bind_param("i", $id);
+    
+    if (!$stmt->execute()) {
+        die("Execute Error: " . $stmt->error);
+    }
+    
     $stmt->close();
 
     header("Location: vehicles.php");
@@ -145,6 +175,16 @@ function pageContent()
             color: #6c757d;
             font-style: italic;
         }
+
+        .price-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
     </style>
 
     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -160,6 +200,7 @@ function pageContent()
                 <th>Vehicle Name</th>
                 <th>Type</th>
                 <th>Capacity</th>
+                <th>Price</th>
                 <th>Facilities</th>
                 <th>Status</th>
                 <th>Actions</th>
@@ -176,6 +217,7 @@ function pageContent()
                     <td><?= htmlspecialchars($row['vehicle_name'] ?? 'N/A'); ?></td>
                     <td><?= htmlspecialchars($row['type_name']); ?></td>
                     <td><?= intval($row['capacity']); ?></td>
+                    <td><span class="price-badge">Rs. <?= number_format($row['price'] ?? 0, 2); ?></span></td>
                     <td>
                         <?php if (!empty($facilities)): ?>
                             <span class="badge bg-info"><?= count($facilities); ?> facilities</span>
@@ -205,6 +247,7 @@ function pageContent()
                                 <p><strong>Vehicle Name:</strong> <?= htmlspecialchars($row['vehicle_name'] ?? 'N/A'); ?></p>
                                 <p><strong>Type:</strong> <?= htmlspecialchars($row['type_name']); ?></p>
                                 <p><strong>Capacity:</strong> <?= intval($row['capacity']); ?> seats</p>
+                                <p><strong>Price:</strong> <span class="price-badge">Rs. <?= number_format($row['price'] ?? 0, 2); ?></span></p>
                                 <p><strong>Status:</strong> <?= ucfirst($row['status']); ?></p>
                                 <p><strong>Facilities:</strong></p>
                                 <div class="view-facilities">
@@ -250,7 +293,7 @@ function pageContent()
                                     </div>
 
                                     <div class="row">
-                                        <div class="col-md-6">
+                                        <div class="col-md-4">
                                             <label>Vehicle Type</label>
                                             <select name="vehicle_type_id" class="form-control mb-2" required>
                                                 <?php foreach ($vehicleTypes as $type): ?>
@@ -258,9 +301,13 @@ function pageContent()
                                                 <?php endforeach; ?>
                                             </select>
                                         </div>
-                                        <div class="col-md-6">
+                                        <div class="col-md-4">
                                             <label>Capacity</label>
                                             <input type="number" name="capacity" value="<?= intval($row['capacity']); ?>" class="form-control mb-2" required>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label>Price (Rs.)</label>
+                                            <input type="number" name="price" value="<?= floatval($row['price'] ?? 0); ?>" step="0.01" min="0" class="form-control mb-2" required>
                                         </div>
                                     </div>
 
@@ -343,7 +390,7 @@ function pageContent()
                         </div>
 
                         <div class="row">
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <label>Vehicle Type</label>
                                 <select name="vehicle_type_id" class="form-control mb-2" required>
                                     <option value="">Select Type</option>
@@ -352,9 +399,13 @@ function pageContent()
                                     <?php endforeach; ?>
                                 </select>
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <label>Capacity</label>
                                 <input type="number" name="capacity" class="form-control mb-2" placeholder="e.g., 45" min="1" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label>Price (Rs.)</label>
+                                <input type="number" name="price" class="form-control mb-2" placeholder="e.g., 5000" step="0.01" min="0" required>
                             </div>
                         </div>
 

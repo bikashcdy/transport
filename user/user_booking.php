@@ -1,151 +1,135 @@
 <?php
 session_start();
-require_once '../db.php';
-require '../libs/PHPMailer/src/PHPMailer.php';
-require '../libs/PHPMailer/src/SMTP.php';
-require '../libs/PHPMailer/src/Exception.php';
-
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception;
-
 if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
     header("Location: ../index.php");
     exit;
 }
 
-$userId = $_SESSION['user_id'];
+require_once '../db.php';
 
-// Get user info
-$userStmt = $conn->prepare("SELECT email, name FROM users WHERE id = ?");
-$userStmt->bind_param("i", $userId);
+// Check if form was submitted
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header("Location: user_dashboard.php");
+    exit;
+}
+
+// Get form data
+$vehicle_id = intval($_POST['vehicle_id']);
+$start_date = $_POST['start_date'];
+$end_date = $_POST['end_date'];
+$user_id = $_SESSION['user_id'];
+
+// Validate dates
+if (empty($start_date) || empty($end_date)) {
+    $_SESSION['error'] = "Please select both start and end dates.";
+    header("Location: user_dashboard.php");
+    exit;
+}
+
+if (strtotime($end_date) < strtotime($start_date)) {
+    $_SESSION['error'] = "End date cannot be before start date.";
+    header("Location: user_dashboard.php");
+    exit;
+}
+
+// Get vehicle details
+$vehicleQuery = "SELECT v.*, vt.type_name 
+                 FROM vehicles v 
+                 JOIN vehicle_types vt ON v.vehicle_type_id = vt.id 
+                 WHERE v.id = ? AND v.status = 'available'";
+$stmt = $conn->prepare($vehicleQuery);
+$stmt->bind_param("i", $vehicle_id);
+$stmt->execute();
+$result = $stmt->get_result();
+
+if ($result->num_rows === 0) {
+    $_SESSION['error'] = "Vehicle not found or not available.";
+    header("Location: user_dashboard.php");
+    exit;
+}
+
+$vehicle = $result->fetch_assoc();
+$stmt->close();
+
+// Check if vehicle is already booked for these dates
+$checkQuery = "SELECT COUNT(*) as count FROM bookings 
+               WHERE vehicle_id = ? 
+               AND status IN ('pending', 'confirmed')
+               AND ((trip_start BETWEEN ? AND ?) 
+                    OR (trip_end BETWEEN ? AND ?)
+                    OR (trip_start <= ? AND trip_end >= ?))";
+$checkStmt = $conn->prepare($checkQuery);
+$checkStmt->bind_param("issssss", $vehicle_id, $start_date, $end_date, $start_date, $end_date, $start_date, $end_date);
+$checkStmt->execute();
+$checkResult = $checkStmt->get_result();
+$checkRow = $checkResult->fetch_assoc();
+$checkStmt->close();
+
+if ($checkRow['count'] > 0) {
+    $_SESSION['error'] = "This vehicle is already booked for the selected dates.";
+    header("Location: user_dashboard.php");
+    exit;
+}
+
+// Get user details
+$userQuery = "SELECT name, email FROM users WHERE id = ?";
+$userStmt = $conn->prepare($userQuery);
+$userStmt->bind_param("i", $user_id);
 $userStmt->execute();
 $userResult = $userStmt->get_result();
 $user = $userResult->fetch_assoc();
+$userStmt->close();
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (!isset($_POST['way_id'])) {
-        die("Invalid request.");
-    }
+// Generate unique booking ID
+$booking_id = 'BK' . date('Ymd') . rand(1000, 9999);
 
-    $wayId = intval($_POST['way_id']);
+// Check if booking ID already exists
+$idCheckQuery = "SELECT COUNT(*) as count FROM bookings WHERE booking_id = ?";
+$idCheckStmt = $conn->prepare($idCheckQuery);
+$idCheckStmt->bind_param("s", $booking_id);
+$idCheckStmt->execute();
+$idCheckResult = $idCheckStmt->get_result();
+$idCheckRow = $idCheckResult->fetch_assoc();
+$idCheckStmt->close();
 
-    // Get way and vehicle info
-    $stmt = $conn->prepare("
-        SELECT w.*, v.id as vehicle_id
-        FROM ways w
-        JOIN vehicles v ON w.vehicle_id = v.id
-        WHERE w.id = ?
-    ");
-    $stmt->bind_param("i", $wayId);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $way = $result->fetch_assoc();
+// Regenerate if exists
+while ($idCheckRow['count'] > 0) {
+    $booking_id = 'BK' . date('Ymd') . rand(1000, 9999);
+    $idCheckStmt = $conn->prepare($idCheckQuery);
+    $idCheckStmt->bind_param("s", $booking_id);
+    $idCheckStmt->execute();
+    $idCheckResult = $idCheckStmt->get_result();
+    $idCheckRow = $idCheckResult->fetch_assoc();
+    $idCheckStmt->close();
+}
 
-    if (!$way) {
-        die("Route not found.");
-    }
+// Insert booking
+$insertQuery = "INSERT INTO bookings (booking_id, user_id, vehicle_id, trip_start, trip_end, price, status, user_name) 
+                VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)";
+$insertStmt = $conn->prepare($insertQuery);
+$insertStmt->bind_param("siissds", $booking_id, $user_id, $vehicle_id, $start_date, $end_date, $vehicle['price'], $user['name']);
 
-    $bookingId = 'BK' . strtoupper(uniqid());
-    $vehicleId = $way['vehicle_id'];
-    $origin = $way['origin'];
-    $destination = $way['destination'];
-
-    $today = date('Y-m-d');
-    $departureTime = $today . ' ' . $way['departure_time'];
-    $arrivalTime = $today . ' ' . $way['arrival_time'];
-
-    $status = 'pending';
-
-    // Insert booking
-    $insert = $conn->prepare("
-        INSERT INTO bookings (booking_id, user_id, vehicle_id, origin, destination, departure_time, arrival_time, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ");
-    $insert->bind_param(
-        "siisssss",
-        $bookingId,
-        $userId,
-        $vehicleId,
-        $origin,
-        $destination,
-        $departureTime,
-        $arrivalTime,
-        $status
-    );
-
-    if ($insert->execute()) {
-        // Get transit stops
-        $transitStmt = $conn->prepare("
-            SELECT transit_point, transit_time, transit_duration
-            FROM way_transits
-            WHERE way_id = ?
-        ");
-        $transitStmt->bind_param("i", $wayId);
-        $transitStmt->execute();
-        $transitResult = $transitStmt->get_result();
-
-        $transitsHTML = '';
-        if ($transitResult->num_rows > 0) {
-            $transitsHTML .= "<ul>";
-            while ($row = $transitResult->fetch_assoc()) {
-                $transitTimeFormatted = date("g:i A", strtotime($row['transit_time']));
-                $duration = (int) $row['transit_duration'];
-                $transitsHTML .= "<li><strong>{$row['transit_point']}</strong> - {$transitTimeFormatted}, {$duration} min</li>";
-            }
-            $transitsHTML .= "</ul>";
-        } else {
-            $transitsHTML = "<p>No transit stops.</p>";
-        }
-
-        // Send email using PHPMailer
-        $mail = new PHPMailer(true);
-
-        try {
-            $mail->SMTPDebug = 2; // Show detailed debug output
-            $mail->Debugoutput = 'html';
-
-            $mail->isSMTP();
-            $mail->Host = 'smtp.gmail.com';
-            $mail->SMTPAuth = true;
-            $mail->Username = 'bikashtransportt@gmail.com';
-            $mail->Password = 'YOUR_APP_PASSWORD'; // Use valid App Password
-            $mail->SMTPSecure = 'tls';
-            $mail->Port = 587;
-
-            $mail->setFrom('bikashtransportt@gmail.com', 'BookingNepal');
-            $mail->addAddress($user['email'], $user['name']);
-
-            $depTime = date("g:i A", strtotime($departureTime));
-            $arrTime = date("g:i A", strtotime($arrivalTime));
-
-            $mail->isHTML(true);
-            $mail->Subject = 'Your Booking is Pending - ' . $bookingId;
-            $mail->Body = "
-                <h2>Booking Pending</h2>
-                <p>Dear <strong>{$user['name']}</strong>,</p>
-                <p>Your booking has been successfully created and is now pending.</p>
-                <p><strong>Booking ID:</strong> {$bookingId}</p>
-                <p><strong>From:</strong> {$origin} <br>
-                <strong>To:</strong> {$destination}</p>
-                <p><strong>Departure:</strong> {$depTime} <br>
-                <strong>Arrival:</strong> {$arrTime}</p>
-                <p><strong>Transit Stops:</strong><br>{$transitsHTML}</p>
-                <p>We will notify you once your booking has been confirmed.</p>
-                <p>Thank you for choosing TMS!</p>
-            ";
-
-            $mail->send();
-            echo "<p>Email sent successfully to {$user['email']}</p>";
-        } catch (Exception $e) {
-            echo "<p>Email could not be sent. Mailer Error: {$mail->ErrorInfo}</p>";
-        }
-
-        header("Location: my_bookings.php?success=1");
-        exit;
-    } else {
-        echo "Booking failed. Please try again.";
-    }
+if ($insertStmt->execute()) {
+    $insertStmt->close();
+    
+    // Store booking details in session for success page
+    $_SESSION['booking_success'] = [
+        'booking_id' => $booking_id,
+        'vehicle_name' => $vehicle['vehicle_name'],
+        'vehicle_number' => $vehicle['vehicle_number'],
+        'vehicle_type' => $vehicle['type_name'],
+        'trip_start' => $start_date,
+        'trip_end' => $end_date,
+        'price' => $vehicle['price'],
+        'user_name' => $user['name'],
+        'user_email' => $user['email']
+    ];
+    
+    header("Location: booking_success.php");
+    exit;
 } else {
-    echo "Invalid access method.";
+    $_SESSION['error'] = "Failed to create booking. Please try again.";
+    header("Location: user_dashboard.php");
+    exit;
 }
 ?>
