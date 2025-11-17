@@ -66,7 +66,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete'])) {
     $id = intval($_POST['id']);
 
     // Delete related ways first if not using ON DELETE CASCADE
-    $conn->query("DELETE FROM ways WHERE vehicle_id = $id");
+    $deleteWays = $conn->prepare("DELETE FROM ways WHERE vehicle_id = ?");
+    if ($deleteWays) {
+        $deleteWays->bind_param("i", $id);
+        $deleteWays->execute();
+        $deleteWays->close();
+    }
 
     // Delete vehicle
     $sql = "DELETE FROM vehicles WHERE id = ?";
@@ -89,13 +94,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete'])) {
 }
 
 // ======================= FETCH DATA =======================
-$typesResult = $conn->query("SELECT * FROM vehicle_types");
+// Ensure required vehicle types exist
+$requiredTypes = ['Bus', 'Micro', 'Taxi'];
+foreach ($requiredTypes as $typeName) {
+    // Check if type exists
+    $checkStmt = $conn->prepare("SELECT id FROM vehicle_types WHERE type_name = ?");
+    if ($checkStmt) {
+        $checkStmt->bind_param("s", $typeName);
+        $checkStmt->execute();
+        $checkResult = $checkStmt->get_result();
+        
+        // If doesn't exist, insert it
+        if ($checkResult->num_rows === 0) {
+            $insertStmt = $conn->prepare("INSERT INTO vehicle_types (type_name) VALUES (?)");
+            if ($insertStmt) {
+                $insertStmt->bind_param("s", $typeName);
+                $insertStmt->execute();
+                $insertStmt->close();
+            }
+        }
+        $checkStmt->close();
+    }
+}
+
+// Fetch vehicle types - Only Bus, Micro, and Taxi
+$typesResult = $conn->query("SELECT * FROM vehicle_types WHERE type_name IN ('Bus', 'Micro', 'Taxi') ORDER BY type_name");
+if ($typesResult === false) {
+    die("Query Error (vehicle_types): " . $conn->error);
+}
+
 $vehicleTypes = [];
 while ($row = $typesResult->fetch_assoc()) {
     $vehicleTypes[] = $row;
 }
 
-$result = $conn->query("SELECT v.*, t.type_name FROM vehicles v JOIN vehicle_types t ON v.vehicle_type_id = t.id");
+// Fetch vehicles with their types
+$vehiclesQuery = "SELECT v.*, t.type_name FROM vehicles v LEFT JOIN vehicle_types t ON v.vehicle_type_id = t.id ORDER BY v.id DESC";
+$result = $conn->query($vehiclesQuery);
+
+if ($result === false) {
+    die("Query Error (vehicles): " . $conn->error . "<br>Query: " . $vehiclesQuery);
+}
 
 // Available facilities options
 $availableFacilities = [
@@ -192,6 +231,7 @@ function pageContent()
         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal"><i class="fas fa-plus"></i> Add Vehicle</button>
     </div>
 
+    <?php if ($result && $result->num_rows > 0): ?>
     <table class="table table-striped align-middle">
         <thead class="table-dark">
             <tr>
@@ -215,7 +255,7 @@ function pageContent()
                     <td><?= $i++; ?></td>
                     <td><?= htmlspecialchars($row['vehicle_number']); ?></td>
                     <td><?= htmlspecialchars($row['vehicle_name'] ?? 'N/A'); ?></td>
-                    <td><?= htmlspecialchars($row['type_name']); ?></td>
+                    <td><?= htmlspecialchars($row['type_name'] ?? 'N/A'); ?></td>
                     <td><?= intval($row['capacity']); ?></td>
                     <td><span class="price-badge">Rs. <?= number_format($row['price'] ?? 0, 2); ?></span></td>
                     <td>
@@ -245,7 +285,7 @@ function pageContent()
                             <div class="modal-body">
                                 <p><strong>Vehicle Number:</strong> <?= htmlspecialchars($row['vehicle_number']); ?></p>
                                 <p><strong>Vehicle Name:</strong> <?= htmlspecialchars($row['vehicle_name'] ?? 'N/A'); ?></p>
-                                <p><strong>Type:</strong> <?= htmlspecialchars($row['type_name']); ?></p>
+                                <p><strong>Type:</strong> <?= htmlspecialchars($row['type_name'] ?? 'N/A'); ?></p>
                                 <p><strong>Capacity:</strong> <?= intval($row['capacity']); ?> seats</p>
                                 <p><strong>Price:</strong> <span class="price-badge">Rs. <?= number_format($row['price'] ?? 0, 2); ?></span></p>
                                 <p><strong>Status:</strong> <?= ucfirst($row['status']); ?></p>
@@ -350,7 +390,7 @@ function pageContent()
                             <form method="POST">
                                 <div class="modal-header bg-danger text-white">
                                     <h5>Delete Vehicle</h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                                 </div>
                                 <div class="modal-body">
                                     <p>Are you sure you want to delete <strong><?= htmlspecialchars($row['vehicle_number']); ?></strong>?</p>
@@ -367,6 +407,11 @@ function pageContent()
             <?php endwhile; ?>
         </tbody>
     </table>
+    <?php else: ?>
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i> No vehicles found. Click "Add Vehicle" to add your first vehicle.
+        </div>
+    <?php endif; ?>
 
     <!-- Add Vehicle Modal -->
     <div class="modal fade" id="addModal" tabindex="-1">

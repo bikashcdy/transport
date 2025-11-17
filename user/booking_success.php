@@ -192,6 +192,7 @@ $username = $_SESSION['username'] ?? 'User';
             font-size: 1.1rem;
             color: #2d3748;
             font-weight: 600;
+            word-break: break-word;
         }
 
         .price-highlight {
@@ -212,6 +213,28 @@ $username = $_SESSION['username'] ?? 'User';
         .price-value {
             font-size: 2.5rem;
             font-weight: 700;
+        }
+
+        .notes-section {
+            background: #e3f2fd;
+            border: 2px solid #2196f3;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .notes-section h4 {
+            color: #1565c0;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.1rem;
+        }
+
+        .notes-section p {
+            color: #1565c0;
+            line-height: 1.6;
         }
 
         .important-note {
@@ -358,6 +381,28 @@ $username = $_SESSION['username'] ?? 'User';
 
                 <div class="detail-item">
                     <div class="detail-icon">
+                        <i class="fas fa-phone"></i>
+                    </div>
+                    <div class="detail-content">
+                        <div class="detail-label">Contact Number</div>
+                        <div class="detail-value"><?= htmlspecialchars($booking['contact_number']) ?></div>
+                    </div>
+                </div>
+
+                <?php if (!empty($booking['alternative_number'])): ?>
+                <div class="detail-item">
+                    <div class="detail-icon">
+                        <i class="fas fa-phone-alt"></i>
+                    </div>
+                    <div class="detail-content">
+                        <div class="detail-label">Alternative Contact</div>
+                        <div class="detail-value"><?= htmlspecialchars($booking['alternative_number']) ?></div>
+                    </div>
+                </div>
+                <?php endif; ?>
+
+                <div class="detail-item">
+                    <div class="detail-icon">
                         <i class="fas fa-envelope"></i>
                     </div>
                     <div class="detail-content">
@@ -410,6 +455,16 @@ $username = $_SESSION['username'] ?? 'User';
                 </div>
             </div>
 
+            <?php if (!empty($booking['notes'])): ?>
+            <div class="notes-section">
+                <h4>
+                    <i class="fas fa-sticky-note"></i>
+                    Additional Notes
+                </h4>
+                <p><?= nl2br(htmlspecialchars($booking['notes'])) ?></p>
+            </div>
+            <?php endif; ?>
+
             <div class="price-highlight">
                 <div class="price-label">Total Amount</div>
                 <div class="price-value">Rs. <?= number_format($booking['price'], 2) ?></div>
@@ -424,7 +479,8 @@ $username = $_SESSION['username'] ?? 'User';
                     <li>Please save your <strong>Booking ID: <?= htmlspecialchars($booking['booking_id']) ?></strong> for future reference</li>
                     <li>Your booking is currently in <strong>Pending</strong> status</li>
                     <li>Admin will review and confirm your booking shortly</li>
-                    <li>You will receive a confirmation email once approved</li>
+                    <li>You will receive a confirmation email at <strong><?= htmlspecialchars($booking['user_email']) ?></strong> once approved</li>
+                    <li>We will contact you on <strong><?= htmlspecialchars($booking['contact_number']) ?></strong> if needed</li>
                     <li>Please arrive 15 minutes before your trip starts</li>
                 </ul>
             </div>

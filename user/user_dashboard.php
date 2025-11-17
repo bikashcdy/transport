@@ -23,16 +23,15 @@ $bookedVehicleIds = [];
 
 // Only proceed if dates are provided
 if ($date !== '' && $end_date !== '') {
-    // First, get all booked vehicle IDs for the date range
+    // Get all booked vehicle IDs for the date range (FIXED)
     $bookedSql = "
-        SELECT DISTINCT w.vehicle_id
-        FROM ways w
-        JOIN bookings b ON w.id = b.way_id
-        WHERE b.booking_status IN ('confirmed', 'pending')
+        SELECT DISTINCT vehicle_id
+        FROM bookings
+        WHERE status IN ('confirmed', 'pending')
         AND (
-            (DATE(w.trip_start) BETWEEN ? AND ?)
-            OR (DATE(w.trip_end) BETWEEN ? AND ?)
-            OR (DATE(w.trip_start) <= ? AND DATE(w.trip_end) >= ?)
+            (DATE(trip_start) BETWEEN ? AND ?)
+            OR (DATE(trip_end) BETWEEN ? AND ?)
+            OR (DATE(trip_start) <= ? AND DATE(trip_end) >= ?)
         )
     ";
     
@@ -50,6 +49,7 @@ if ($date !== '' && $end_date !== '') {
             $bookedVehicleIds[] = $bookedRow['vehicle_id'];
         }
         $bookedStmt->close();
+
     }
     
     // Query to get ALL vehicles by type with their availability status
@@ -797,7 +797,8 @@ $username = $_SESSION['username'] ?? 'User';
                             <i class="fas fa-ban"></i> Not Available
                         </button>
                         <?php else: ?>
-                        <form action="user_booking.php" method="POST">
+                       <!-- NEW -->
+                        <form action="booking_process.php" method="POST">
                             <input type="hidden" name="vehicle_id" value="<?= $vehicle['id'] ?>" />
                             <input type="hidden" name="start_date" value="<?= htmlspecialchars($date) ?>" />
                             <input type="hidden" name="end_date" value="<?= htmlspecialchars($end_date) ?>" />

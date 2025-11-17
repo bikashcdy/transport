@@ -1,4 +1,6 @@
 <?php
+ob_start(); // Start output buffering
+
 $pageTitle = "Bookings";
 include '../db.php';
 
@@ -11,10 +13,11 @@ use PHPMailer\PHPMailer\Exception;
 
 $search = '';
 
+// Handle booking deletion
 if (isset($_POST['delete_booking'])) {
-    $booking_id = intval($_POST['booking_id']);
+    $booking_id = $_POST['booking_id'];
     $delete = $conn->prepare("DELETE FROM bookings WHERE booking_id = ?");
-    $delete->bind_param("i", $booking_id);
+    $delete->bind_param("s", $booking_id);
     if ($delete->execute()) {
         echo "<script>alert('Booking deleted successfully!'); window.location='bookings.php';</script>";
         exit;
@@ -24,28 +27,66 @@ if (isset($_POST['delete_booking'])) {
     }
 }
 
+// Handle status update
 if (isset($_POST['update_status'])) {
     $booking_id = $_POST['booking_id'];
     $status = $_POST['status'];
-
-    $conn->query("UPDATE bookings SET status='$status' WHERE booking_id='$booking_id'");
-
-    if ($status == 'confirmed') {
-        $userResult = $conn->query("SELECT name, email FROM users WHERE id = (SELECT user_id FROM bookings WHERE booking_id = '$booking_id')");
-        if ($userResult && $userResult->num_rows > 0) {
-            $user = $userResult->fetch_assoc();
-            sendBookingConfirmationEmail($user['email'], $user['name'], $booking_id);
-        }
+    
+    // Validate status value
+    $allowed_statuses = ['pending', 'confirmed', 'completed', 'cancelled'];
+    if (!in_array($status, $allowed_statuses)) {
+        echo "<script>alert('Invalid status value.'); window.location='bookings.php';</script>";
+        exit;
     }
 
-    header("Location: bookings.php");
-    exit();
+    // Use prepared statement - Update status first
+    $stmt = $conn->prepare("UPDATE bookings SET status = ? WHERE booking_id = ?");
+    $stmt->bind_param("ss", $status, $booking_id);
+    
+    if ($stmt->execute()) {
+        $stmt->close();
+        
+        // Try to send email if status is confirmed, but don't block the update
+        if ($status == 'confirmed') {
+            // Get user details - check both booking email and user email
+            $userStmt = $conn->prepare("
+                SELECT 
+                    COALESCE(b.email, u.email) as email,
+                    COALESCE(b.user_name, u.name) as name
+                FROM bookings b
+                LEFT JOIN users u ON b.user_id = u.id
+                WHERE b.booking_id = ?
+            ");
+            $userStmt->bind_param("s", $booking_id);
+            $userStmt->execute();
+            $userResult = $userStmt->get_result();
+            
+            if ($userResult && $userResult->num_rows > 0) {
+                $user = $userResult->fetch_assoc();
+                
+                // Only attempt to send email if we have a valid email
+                if (!empty($user['email']) && filter_var($user['email'], FILTER_VALIDATE_EMAIL)) {
+                    // Send email asynchronously - don't wait for it
+                    @sendBookingConfirmationEmail($user['email'], $user['name'], $booking_id);
+                }
+            }
+            $userStmt->close();
+        }
+        
+        echo "<script>alert('Booking status updated successfully!'); window.location='bookings.php';</script>";
+        exit();
+    } else {
+        echo "<script>alert('Error updating booking status: " . $conn->error . "'); window.location='bookings.php';</script>";
+        exit;
+    }
 }
 
+// Handle search
 if (isset($_POST['search'])) {
-    $search = mysqli_real_escape_string($conn, $_POST['search']);
+    $search = trim($_POST['search']);
 }
 
+// Build query with prepared statement for better security
 $query = "
     SELECT 
         bookings.booking_id, 
@@ -56,21 +97,52 @@ $query = "
         bookings.price,
         bookings.status, 
         bookings.user_name,
-        users.email AS user_email
+        bookings.contact_number,
+        bookings.alternative_number,
+        bookings.email as booking_email,
+        bookings.notes,
+        users.email AS user_email,
+        users.name AS registered_user_name,
+        vehicles.vehicle_name,
+        vehicles.vehicle_number
     FROM bookings
     LEFT JOIN users ON bookings.user_id = users.id
-    WHERE bookings.booking_id LIKE '%$search%'
-    ORDER BY bookings.created_at DESC
+    LEFT JOIN vehicles ON bookings.vehicle_id = vehicles.id
 ";
 
-$result = $conn->query($query);
+if (!empty($search)) {
+    $query .= " WHERE bookings.booking_id LIKE ?";
+}
+
+$query .= " ORDER BY bookings.booking_id DESC";
+
+if (!empty($search)) {
+    $stmt = $conn->prepare($query);
+    $searchParam = "%$search%";
+    $stmt->bind_param("s", $searchParam);
+    $stmt->execute();
+    $result = $stmt->get_result();
+} else {
+    $result = $conn->query($query);
+}
 
 if ($result === false) {
     die("Query Error: " . $conn->error);
 }
 
+// Store results in array to prevent multiple iterations
+$bookings = [];
+if ($result && $result->num_rows > 0) {
+    while ($row = $result->fetch_assoc()) {
+        $bookings[] = $row;
+    }
+}
+
 function sendBookingConfirmationEmail($userEmail, $userName, $bookingId)
 {
+    // Set a timeout to prevent hanging
+    ini_set('max_execution_time', 10);
+    
     $mail = new PHPMailer(true);
     try {
         $mail->isSMTP();
@@ -80,192 +152,241 @@ function sendBookingConfirmationEmail($userEmail, $userName, $bookingId)
         $mail->Password = 'rhhi twul ebnl bwyc';
         $mail->SMTPSecure = 'tls';
         $mail->Port = 587;
+        
+        // Set timeout for SMTP connection
+        $mail->Timeout = 5;
+        $mail->SMTPKeepAlive = false;
 
         $mail->setFrom('bikashtransportt@gmail.com', 'TMS Booking');
         $mail->addAddress($userEmail, $userName);
 
         $mail->isHTML(true);
-        $mail->Subject = 'Booking Confirmation - ' . $bookingId;
+        $mail->Subject = 'Booking Confirmation - ' . htmlspecialchars($bookingId);
         $mail->Body = "
             <h2>Booking Confirmation</h2>
-            <p>Dear $userName,</p>
+            <p>Dear " . htmlspecialchars($userName) . ",</p>
             <p>Your booking has been confirmed with the following details:</p>
-            <p><strong>Booking ID:</strong> $bookingId</p>
+            <p><strong>Booking ID:</strong> " . htmlspecialchars($bookingId) . "</p>
             <p>Thank you for booking with us!</p>
         ";
 
         $mail->send();
+        return true;
     } catch (Exception $e) {
+        // Log the error but don't stop execution
         error_log("Email could not be sent. Mailer Error: {$mail->ErrorInfo}");
+        return false;
     }
 }
 
 function pageContent()
 {
-    global $result, $search;
+    global $bookings, $search;
 ?>
-    <form method="POST" class="mb-4">
-        <div class="input-group">
-            <input type="text" class="form-control" name="search" value="<?= htmlspecialchars($search); ?>" placeholder="Search Booking ID...">
-            <button class="btn btn-primary" type="submit">Search</button>
-        </div>
-    </form>
-
-    <?php if ($result && $result->num_rows > 0): ?>
-    <table class="table table-striped table-hover">
-        <thead>
-            <tr>
-                <th>SN</th>
-                <th>Booking ID</th>
-                <th>User Name</th>
-                <th>Vehicle ID</th>
-                <th>Trip Starts</th>
-                <th>Trip Ends</th>
-                <th>Price</th>
-                <th>Status</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-        <?php $i = 1; while ($row = $result->fetch_assoc()): ?>
-            <tr>
-                <td><?= $i++; ?></td>
-                <td><?= $row['booking_id']; ?></td>
-                <td><?= $row['user_name']; ?></td>
-                <td><?= $row['vehicle_id']; ?></td>
-                <td><?= date('M d, Y h:i A', strtotime($row['trip_start'])); ?></td>
-                <td><?= date('M d, Y h:i A', strtotime($row['trip_end'])); ?></td>
-                <td>Rs. <?= number_format($row['price'], 2); ?></td>
-                <td>
-                    <?php
-                    $statusClass = '';
-                    switch($row['status']) {
-                        case 'confirmed': $statusClass = 'badge bg-success'; break;
-                        case 'completed': $statusClass = 'badge bg-primary'; break;
-                        case 'cancelled': $statusClass = 'badge bg-danger'; break;
-                        default: $statusClass = 'badge bg-warning text-dark';
-                    }
-                    ?>
-                    <span class="<?= $statusClass; ?>"><?= ucfirst($row['status']); ?></span>
-                </td>
-                <td>
-                    <button class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#viewModal<?= $row['booking_id']; ?>" title="View Details">
-                        <i class="fas fa-eye"></i>
-                    </button>
-
-                    <?php if ($row['status'] == 'pending'): ?>
-                    <form method="POST" style="display:inline;">
-                        <input type="hidden" name="booking_id" value="<?= $row['booking_id']; ?>">
-                        <input type="hidden" name="status" value="confirmed">
-                        <button type="submit" name="update_status" class="btn btn-success btn-sm" title="Confirm Booking">
-                            <i class="fas fa-check-circle"></i>
-                        </button>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                <!-- Search Form -->
+                <div class="mb-4">
+                    <form method="POST" class="mb-3">
+                        <div class="input-group" style="max-width: 500px;">
+                            <input type="text" class="form-control" name="search" value="<?php echo htmlspecialchars($search); ?>" placeholder="Search Booking ID...">
+                            <button class="btn btn-primary" type="submit">Search</button>
+                        </div>
                     </form>
-                    <?php endif; ?>
-
-                    <button class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#editModal<?= $row['booking_id']; ?>" title="Edit Status">
-                        <i class="fas fa-edit"></i>
-                    </button>
-
-                    <form method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this booking?');">
-                        <input type="hidden" name="booking_id" value="<?= $row['booking_id']; ?>">
-                        <button type="submit" name="delete_booking" class="btn btn-danger btn-sm" title="Delete Booking">
-                            <i class="fas fa-trash-alt"></i>
-                        </button>
-                    </form>
-                </td>
-            </tr>
-
-            <div class="modal fade" id="viewModal<?= $row['booking_id']; ?>" tabindex="-1">
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <div class="modal-header bg-info text-white">
-                            <h5 class="modal-title">Booking Details</h5>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <table class="table table-borderless">
-                                <tr>
-                                    <td><strong>Booking ID:</strong></td>
-                                    <td><?= $row['booking_id']; ?></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>User Name:</strong></td>
-                                    <td><?= $row['user_name']; ?></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>User Email:</strong></td>
-                                    <td><?= $row['user_email']; ?></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Vehicle ID:</strong></td>
-                                    <td><?= $row['vehicle_id']; ?></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Trip Starts:</strong></td>
-                                    <td><?= $row['trip_start']; ?></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Trip Ends:</strong></td>
-                                    <td><?= $row['trip_end']; ?></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Price:</strong></td>
-                                    <td>Rs. <?= number_format($row['price'], 2); ?></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Status:</strong></td>
-                                    <td><span class="badge bg-<?= $row['status'] == 'confirmed' ? 'success' : ($row['status'] == 'completed' ? 'primary' : ($row['status'] == 'cancelled' ? 'danger' : 'warning')); ?>"><?= ucfirst($row['status']); ?></span></td>
-                                </tr>
-                            </table>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        </div>
-                    </div>
                 </div>
-            </div>
 
-            <div class="modal fade" id="editModal<?= $row['booking_id']; ?>" tabindex="-1">
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <form method="POST" action="bookings.php">
-                            <div class="modal-header bg-warning">
-                                <h5 class="modal-title">Update Booking Status</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                            </div>
-                            <div class="modal-body">
-                                <input type="hidden" name="booking_id" value="<?= $row['booking_id']; ?>">
-                                <div class="mb-3">
-                                    <label class="form-label"><strong>Booking ID:</strong> <?= $row['booking_id']; ?></label>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">Status</label>
-                                    <select name="status" class="form-select" required>
-                                        <option value="pending" <?= $row['status'] == 'pending' ? 'selected' : ''; ?>>Pending</option>
-                                        <option value="confirmed" <?= $row['status'] == 'confirmed' ? 'selected' : ''; ?>>Confirmed</option>
-                                        <option value="completed" <?= $row['status'] == 'completed' ? 'selected' : ''; ?>>Completed</option>
-                                        <option value="cancelled" <?= $row['status'] == 'cancelled' ? 'selected' : ''; ?>>Cancelled</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="submit" name="update_status" class="btn btn-warning">Update Status</button>
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            </div>
+                <?php if (!empty($bookings)): ?>
+                <!-- Table Section -->
+                <div class="table-responsive" style="clear: both; display: block; width: 100%;">
+                    <table class="table table-striped table-hover" style="width: 100%; table-layout: auto;">
+                        <thead>
+                            <tr>
+                                <th>Booking ID</th>
+                                <th>User Name</th>
+                                <th>Vehicle ID</th>
+                                <th>Vehicle Name</th>
+                                <th>Trip Start</th>
+                                <th>Trip End</th>
+                                <th>Duration</th>
+                                <th>Price</th>
+                                <th>Status</th>
+                                <th>Notes</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            <?php 
+            foreach ($bookings as $row) {
+                // Use user_name from bookings table
+                $displayName = !empty($row['user_name']) ? $row['user_name'] : 
+                              (!empty($row['registered_user_name']) ? $row['registered_user_name'] : 'N/A');
+                
+                // Calculate duration
+                $start = new DateTime($row['trip_start']);
+                $end = new DateTime($row['trip_end']);
+                $diff = $start->diff($end);
+                $duration = $diff->days . ' day' . ($diff->days != 1 ? 's' : '');
+                
+                // Vehicle name
+                $vehicleName = !empty($row['vehicle_name']) ? $row['vehicle_name'] : 'N/A';
+                
+                // Email
+                $displayEmail = !empty($row['booking_email']) ? $row['booking_email'] : 
+                               (!empty($row['user_email']) ? $row['user_email'] : 'N/A');
+                
+                // Status badge color
+                $statusColors = [
+                    'pending' => 'warning',
+                    'confirmed' => 'success',
+                    'completed' => 'info',
+                    'cancelled' => 'danger'
+                ];
+                $statusColor = isset($statusColors[$row['status']]) ? $statusColors[$row['status']] : 'secondary';
+            ?>
+                <tr>
+                    <td><?php echo htmlspecialchars($row['booking_id']); ?></td>
+                    <td><?php echo htmlspecialchars($displayName); ?></td>
+                    <td><?php echo htmlspecialchars($row['vehicle_id']); ?></td>
+                    <td><?php echo htmlspecialchars($vehicleName); ?></td>
+                    <td><?php echo date('M d, Y', strtotime($row['trip_start'])); ?></td>
+                    <td><?php echo date('M d, Y', strtotime($row['trip_end'])); ?></td>
+                    <td><?php echo $duration; ?></td>
+                    <td>Rs. <?php echo number_format($row['price'], 2); ?></td>
+                    <td><span class="badge bg-<?php echo $statusColor; ?>"><?php echo ucfirst($row['status']); ?></span></td>
+                    <td><?php echo !empty($row['notes']) ? htmlspecialchars(substr($row['notes'], 0, 50)) . (strlen($row['notes']) > 50 ? '...' : '') : 'N/A'; ?></td>
+                    <td class="text-nowrap">
+                        <!-- View Button -->
+                        <button class="btn btn-info btn-sm" onclick="viewBooking('<?php echo htmlspecialchars($row['booking_id'], ENT_QUOTES); ?>')" title="View Details">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        
+                        <!-- Edit/Update Status Button -->
+                        <button class="btn btn-warning btn-sm" onclick="updateBooking('<?php echo htmlspecialchars($row['booking_id'], ENT_QUOTES); ?>', '<?php echo htmlspecialchars($row['status'], ENT_QUOTES); ?>')" title="Update Status">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        
+                        <!-- Delete Button -->
+                        <form method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this booking?');">
+                            <input type="hidden" name="booking_id" value="<?php echo htmlspecialchars($row['booking_id']); ?>">
+                            <button type="submit" name="delete_booking" class="btn btn-danger btn-sm" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
                         </form>
+                    </td>
+                </tr>
+            <?php } // End foreach ?>
+            </tbody>
+        </table>
+    </div>
+
+                <?php else: ?>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> No bookings found.
                     </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Booking Modal -->
+    <div class="modal fade" id="viewModal" tabindex="-1" aria-labelledby="viewModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="viewModalLabel">Booking Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="viewModalBody">
+                    <!-- Content will be loaded here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
-
-        <?php endwhile; ?>
-        </tbody>
-    </table>
-    <?php else: ?>
-        <div class="alert alert-info">
-            <i class="fas fa-info-circle"></i> No bookings found.
         </div>
-    <?php endif; ?>
+    </div>
+
+    <!-- Update Status Modal -->
+    <div class="modal fade" id="updateModal" tabindex="-1" aria-labelledby="updateModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="updateModalLabel">Update Booking Status</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="POST">
+                    <div class="modal-body">
+                        <input type="hidden" name="booking_id" id="update_booking_id">
+                        <div class="mb-3">
+                            <label for="status" class="form-label">Status</label>
+                            <select class="form-select" name="status" id="status" required>
+                                <option value="pending">Pending</option>
+                                <option value="confirmed">Confirmed</option>
+                                <option value="completed">Completed</option>
+                                <option value="cancelled">Cancelled</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="submit" name="update_status" class="btn btn-primary">Update Status</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    function viewBooking(bookingId) {
+        // Find the booking data from the table
+        <?php 
+        echo "const bookingsData = " . json_encode($bookings) . ";";
+        ?>
+        
+        const booking = bookingsData.find(b => b.booking_id === bookingId);
+        
+        if (booking) {
+            const displayName = booking.user_name || booking.registered_user_name || 'N/A';
+            const displayEmail = booking.booking_email || booking.user_email || 'N/A';
+            const vehicleName = booking.vehicle_name || 'N/A';
+            const vehicleNumber = booking.vehicle_number || 'N/A';
+            
+            const content = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Booking ID:</strong> ${booking.booking_id}</p>
+                        <p><strong>User Name:</strong> ${displayName}</p>
+                        <p><strong>Email:</strong> ${displayEmail}</p>
+                        <p><strong>Contact:</strong> ${booking.contact_number || 'N/A'}</p>
+                        <p><strong>Alternative Contact:</strong> ${booking.alternative_number || 'N/A'}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Vehicle:</strong> ${vehicleName}</p>
+                        <p><strong>Vehicle Number:</strong> ${vehicleNumber}</p>
+                        <p><strong>Trip Start:</strong> ${new Date(booking.trip_start).toLocaleDateString()}</p>
+                        <p><strong>Trip End:</strong> ${new Date(booking.trip_end).toLocaleDateString()}</p>
+                        <p><strong>Price:</strong> Rs. ${parseFloat(booking.price).toLocaleString()}</p>
+                        <p><strong>Status:</strong> <span class="badge bg-primary">${booking.status}</span></p>
+                    </div>
+                    <div class="col-12 mt-3">
+                        <p><strong>Notes:</strong></p>
+                        <p>${booking.notes || 'No notes available'}</p>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('viewModalBody').innerHTML = content;
+            new bootstrap.Modal(document.getElementById('viewModal')).show();
+        }
+    }
+
+    function updateBooking(bookingId, currentStatus) {
+        document.getElementById('update_booking_id').value = bookingId;
+        document.getElementById('status').value = currentStatus;
+        new bootstrap.Modal(document.getElementById('updateModal')).show();
+    }
+    </script>
 <?php
 }
 
