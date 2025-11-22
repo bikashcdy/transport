@@ -69,7 +69,6 @@ function pageContent()
         </div>
     </div>
 
-    <!-- Reports Card
     <div class="col-md-3 col-sm-6">
         <div class="card text-center shadow-sm border-0 h-100"
             style="background:linear-gradient(45deg,#ef4444,#f87171);color:white;">
@@ -79,9 +78,8 @@ function pageContent()
                 <h2><?= $reports; ?></h2>
             </div>
         </div>
-    </div> -->
+    </div>
 
-    <!-- Total Revenue Card -->
     <div class="col-md-3 col-sm-6">
         <div class="card text-center shadow-sm border-0 h-100"
             style="background:linear-gradient(45deg,#3b82f6,#60a5fa);color:white;">

@@ -149,7 +149,7 @@ function sendBookingConfirmationEmail($userEmail, $userName, $bookingId)
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
         $mail->Username = 'bikashtransportt@gmail.com';
-        $mail->Password = 'rhhi twul ebnl bwyc';
+        $mail->Password = 'nodc knlq hxgf inul';
         $mail->SMTPSecure = 'tls';
         $mail->Port = 587;
         
@@ -157,7 +157,7 @@ function sendBookingConfirmationEmail($userEmail, $userName, $bookingId)
         $mail->Timeout = 5;
         $mail->SMTPKeepAlive = false;
 
-        $mail->setFrom('bikashtransportt@gmail.com', 'TMS Booking');
+        $mail->setFrom('bikashtransportt@gmail.com', 'BookingNepal');
         $mail->addAddress($userEmail, $userName);
 
         $mail->isHTML(true);

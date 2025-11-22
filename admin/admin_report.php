@@ -8,20 +8,16 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'admin') {
 require_once '../db.php';
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
-// ====================== SUMMARY DATA - FIXED QUERIES ======================
-// Total bookings from bookings table
+// ====================== SUMMARY DATA ======================
 $totalBookingsResult = $conn->query("SELECT COUNT(*) AS total FROM bookings");
 $totalBookings = $totalBookingsResult ? $totalBookingsResult->fetch_assoc()['total'] : 0;
 
-// Total users (only customers, not admins)
 $totalUsersResult = $conn->query("SELECT COUNT(*) AS total FROM users WHERE user_type='user'");
 $totalUsers = $totalUsersResult ? $totalUsersResult->fetch_assoc()['total'] : 0;
 
-// Total vehicles from vehicles table
 $totalVehiclesResult = $conn->query("SELECT COUNT(*) AS total FROM vehicles");
 $totalVehicles = $totalVehiclesResult ? $totalVehiclesResult->fetch_assoc()['total'] : 0;
 
-// Total revenue from completed bookings only
 $totalRevenueResult = $conn->query("SELECT COALESCE(SUM(price), 0) AS total FROM bookings WHERE status='completed'");
 $totalRevenue = $totalRevenueResult ? $totalRevenueResult->fetch_assoc()['total'] : 0;
 
@@ -41,21 +37,12 @@ $cancelledBookings = $cancelledBookingsResult ? $cancelledBookingsResult->fetch_
 // ====================== USER ACTIVITY ======================
 $userActivityData = [];
 $result = $conn->query("
-    SELECT 
-        u.id,
-        u.name, 
-        u.email,
-        COUNT(b.id) AS total_bookings, 
-        COALESCE(SUM(b.price), 0) AS total_spent,
-        MAX(b.created_at) AS last_booking
-    FROM users u
-    LEFT JOIN bookings b ON u.id = b.user_id
-    WHERE u.user_type = 'user'
-    GROUP BY u.id, u.name, u.email
-    ORDER BY total_bookings DESC
-    LIMIT 20
+    SELECT u.id, u.name, u.email, COUNT(b.id) AS total_bookings, 
+           COALESCE(SUM(b.price), 0) AS total_spent, MAX(b.created_at) AS last_booking
+    FROM users u LEFT JOIN bookings b ON u.id = b.user_id
+    WHERE u.user_type = 'user' GROUP BY u.id, u.name, u.email
+    ORDER BY total_bookings DESC LIMIT 20
 ");
-
 if ($result) {
     while ($row = $result->fetch_assoc()) {
         $userActivityData[] = $row;
@@ -65,35 +52,16 @@ if ($result) {
 // ====================== MONTHLY REVENUE ======================
 $monthlyRevenue = [];
 $result = $conn->query("
-    SELECT 
-        DATE_FORMAT(created_at, '%Y-%m') AS month,
-        COALESCE(SUM(price), 0) AS revenue,
-        COUNT(*) AS bookings
-    FROM bookings
-    WHERE status='completed' AND created_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
-    GROUP BY DATE_FORMAT(created_at, '%Y-%m')
-    ORDER BY month ASC
+    SELECT DATE_FORMAT(created_at, '%Y-%m') AS month, COALESCE(SUM(price), 0) AS revenue, COUNT(*) AS bookings
+    FROM bookings WHERE status='completed' AND created_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+    GROUP BY DATE_FORMAT(created_at, '%Y-%m') ORDER BY month ASC
 ");
-
 if ($result) {
     while ($row = $result->fetch_assoc()) {
         $monthlyRevenue[] = $row;
     }
 }
 
-// ====================== DEBUG INFO (Optional - Remove after testing) ======================
-// Uncomment these lines to see what's in your database
-/*
-echo "<pre>";
-echo "Total Bookings Query Result: ";
-var_dump($totalBookings);
-echo "\nTotal Users Query Result: ";
-var_dump($totalUsers);
-echo "\nTotal Vehicles Query Result: ";
-var_dump($totalVehicles);
-echo "</pre>";
-exit; // Remove this line after debugging
-*/
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -103,170 +71,38 @@ exit; // Remove this line after debugging
 <title>Admin Dashboard | BookingNepal</title>
 <link rel="stylesheet" href="admin_report.css">
 <style>
-.status-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 15px;
-    margin: 20px 0;
-}
-
-.status-card {
-    background: white;
-    border-radius: 8px;
-    padding: 20px;
-    text-align: center;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    border-left: 4px solid;
-    transition: transform 0.2s;
-}
-
-.status-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-}
-
+.status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin: 20px 0; }
+.status-card { background: white; border-radius: 8px; padding: 20px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-left: 4px solid; transition: transform 0.2s; }
+.status-card:hover { transform: translateY(-5px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
 .status-card.pending { border-color: #f39c12; }
 .status-card.confirmed { border-color: #27ae60; }
 .status-card.completed { border-color: #3498db; }
 .status-card.cancelled { border-color: #e74c3c; }
-
-.status-card h4 {
-    margin: 0 0 10px 0;
-    font-size: 14px;
-    color: #7f8c8d;
-    text-transform: uppercase;
-}
-
-.status-card .count {
-    font-size: 32px;
-    font-weight: bold;
-    color: #2c3e50;
-}
-
-.status-card .percentage {
-    font-size: 12px;
-    color: #95a5a6;
-    margin-top: 5px;
-}
-
-.chart-container {
-    background: white;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    margin: 20px 0;
-}
-
-.report-actions {
-    display: flex;
-    gap: 10px;
-    margin: 20px 0;
-    flex-wrap: wrap;
-}
-
-.report-actions button {
-    flex: 1;
-    min-width: 200px;
-    padding: 15px 25px;
-    font-size: 16px;
-    font-weight: 600;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.3s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-}
-
-.btn-primary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-}
-
-.btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-}
-
-.btn-secondary {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-    color: white;
-}
-
-.btn-secondary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(245, 87, 108, 0.4);
-}
-
-.btn-success {
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-    color: white;
-}
-
-.btn-success:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(79, 172, 254, 0.4);
-}
-
-.summary-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 20px;
-    margin: 20px 0;
-}
-
-.card {
-    background: white;
-    border-radius: 10px;
-    padding: 25px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    text-align: center;
-    transition: transform 0.2s;
-}
-
-.card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-}
-
-.card h3 {
-    margin: 0 0 10px 0;
-    font-size: 16px;
-    color: #7f8c8d;
-    text-transform: uppercase;
-}
-
-.card p {
-    margin: 0;
-    font-size: 32px;
-    font-weight: bold;
-    color: #2c3e50;
-}
-
-.empty-state {
-    text-align: center;
-    padding: 40px;
-    background: #f8f9fa;
-    border-radius: 8px;
-    margin: 20px 0;
-}
-
-.empty-state h3 {
-    color: #6c757d;
-    margin-bottom: 10px;
-}
-
-.empty-state p {
-    color: #adb5bd;
-}
-
-@media print {
-    .report-actions {
-        display: none !important;
-    }
-}
+.status-card h4 { margin: 0 0 10px 0; font-size: 14px; color: #7f8c8d; text-transform: uppercase; }
+.status-card .count { font-size: 32px; font-weight: bold; color: #2c3e50; }
+.status-card .percentage { font-size: 12px; color: #95a5a6; margin-top: 5px; }
+.chart-container { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin: 20px 0; }
+.report-actions { display: flex; gap: 10px; margin: 20px 0; flex-wrap: wrap; }
+.report-actions button { flex: 1; min-width: 200px; padding: 15px 25px; font-size: 16px; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4); }
+.btn-secondary { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; }
+.btn-secondary:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(245, 87, 108, 0.4); }
+.btn-success { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; }
+.btn-success:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(79, 172, 254, 0.4); }
+.btn-save { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; }
+.btn-save:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(56, 239, 125, 0.4); }
+.summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0; }
+.card { background: white; border-radius: 10px; padding: 25px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; transition: transform 0.2s; }
+.card:hover { transform: translateY(-5px); box-shadow: 0 4px 15px rgba(0,0,0,0.15); }
+.card h3 { margin: 0 0 10px 0; font-size: 16px; color: #7f8c8d; text-transform: uppercase; }
+.card p { margin: 0; font-size: 32px; font-weight: bold; color: #2c3e50; }
+.empty-state { text-align: center; padding: 40px; background: #f8f9fa; border-radius: 8px; margin: 20px 0; }
+.empty-state h3 { color: #6c757d; margin-bottom: 10px; }
+.empty-state p { color: #adb5bd; }
+.alert-success { background: #d4edda; color: #155724; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #c3e6cb; }
+.alert-error { background: #f8d7da; color: #721c24; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #f5c6cb; }
+@media print { .report-actions { display: none !important; } }
 </style>
 </head>
 <body>
@@ -276,7 +112,6 @@ exit; // Remove this line after debugging
         <p>Vehicle Booking Management System</p>
     </header>
 
-    <!-- Summary Cards -->
     <div class="summary-cards">
         <div class="card" style="border-top: 4px solid #3498db;">
             <h3>📋 Total Bookings</h3>
@@ -303,7 +138,6 @@ exit; // Remove this line after debugging
     </div>
     <?php else: ?>
 
-    <!-- Booking Status Grid -->
     <div class="report-section">
         <h2>📈 Booking Status Overview</h2>
         <div class="status-grid">
@@ -330,11 +164,10 @@ exit; // Remove this line after debugging
         </div>
     </div>
 
-    <!-- Monthly Revenue Chart -->
     <?php if (!empty($monthlyRevenue)): ?>
     <div class="chart-container">
         <h2>💰 Monthly Revenue Trend</h2>
-        <table class="table table-striped" style="width: 100%; border-collapse: collapse;">
+        <table style="width: 100%; border-collapse: collapse;">
             <thead>
                 <tr style="background: #3498db; color: white;">
                     <th style="padding: 12px; text-align: left;">Month</th>
@@ -355,7 +188,6 @@ exit; // Remove this line after debugging
     </div>
     <?php endif; ?>
 
-    <!-- User Activity Table -->
     <div class="report-section">
         <h2>👥 Top Customer Activity</h2>
         <div class="table-wrapper">
@@ -372,11 +204,7 @@ exit; // Remove this line after debugging
                 </thead>
                 <tbody>
                 <?php if (empty($userActivityData)): ?>
-                    <tr>
-                        <td colspan="6" style="text-align: center; padding: 40px; color: #95a5a6;">
-                            <strong>No customer activity data available</strong>
-                        </td>
-                    </tr>
+                    <tr><td colspan="6" style="text-align: center; padding: 40px; color: #95a5a6;"><strong>No customer activity data available</strong></td></tr>
                 <?php else: ?>
                     <?php $i=1; foreach($userActivityData as $user): ?>
                     <tr style="border-bottom: 1px solid #ecf0f1;">
@@ -393,40 +221,21 @@ exit; // Remove this line after debugging
             </table>
         </div>
     </div>
-
     <?php endif; ?>
 
-    <!-- Report Actions -->
     <div class="report-actions">
-        <button class="btn-primary" onclick="window.location.href='generate_report.php'" title="Download comprehensive PDF report">
+        <button class="btn-primary" onclick="window.location.href='generate_report.php'" title="Download PDF report">
             <span>📄</span> Generate PDF Report
         </button>
         <button class="btn-secondary" onclick="window.print()" title="Print this page">
             <span>🖨️</span> Print Dashboard
         </button>
-        <button class="btn-success" onclick="window.location.href='dashboard.php'" title="Back to main dashboard">
-            <span>🏠</span> Back to Dashboard
-        </button>
     </div>
 </div>
 
 <script>
-// Print-specific styles
-window.onbeforeprint = function() {
-    document.querySelectorAll('.report-actions').forEach(el => el.style.display = 'none');
-};
-
-window.onafterprint = function() {
-    document.querySelectorAll('.report-actions').forEach(el => el.style.display = 'flex');
-};
-
-// Debug: Log counts to console
-console.log('Dashboard Stats:', {
-    bookings: <?= $totalBookings ?>,
-    users: <?= $totalUsers ?>,
-    vehicles: <?= $totalVehicles ?>,
-    revenue: <?= $totalRevenue ?>
-});
+window.onbeforeprint = function() { document.querySelectorAll('.report-actions').forEach(el => el.style.display = 'none'); };
+window.onafterprint = function() { document.querySelectorAll('.report-actions').forEach(el => el.style.display = 'flex'); };
 </script>
 </body>
 </html>

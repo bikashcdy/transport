@@ -201,6 +201,32 @@ if ($recentBookingsCount > 0) {
     }
 }
 
+$reportData = json_encode([
+    'summary' => [
+        'total_bookings' => $totalBookings,
+        'total_users' => $totalUsers,
+        'total_vehicles' => $totalVehicles,
+        'total_revenue' => $totalRevenue,
+        'avg_booking_value' => $avgBookingValue
+    ],
+    'booking_status' => $statusData,
+    'monthly_revenue' => $monthlyRevenue,
+    'top_vehicles' => $topVehicles,
+    'top_customers' => $topUsers,
+    'recent_bookings' => $recentBookings,
+    'duration_analysis' => $durationAnalysis,
+    'day_analysis' => $dayAnalysis,
+    'generated_at' => date('Y-m-d H:i:s')
+]);
+
+$reportType = 'pdf_report';
+$generatedBy = $_SESSION['user_id'];
+
+$stmt = $conn->prepare("INSERT INTO reports (report_type, report_data, generated_by) VALUES (?, ?, ?)");
+$stmt->bind_param("ssi", $reportType, $reportData, $generatedBy);
+$stmt->execute();
+$stmt->close();
+
 // ====================== CREATE ENHANCED PDF ======================
 class EnhancedPDF extends FPDF {
     function Header() {

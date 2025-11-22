@@ -6,6 +6,8 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
 }
 
 require_once '../db.php';
+// ADD THIS LINE: Include the email functions
+require_once 'email_functions.php';
 
 // Check if form was submitted
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -181,20 +183,19 @@ if (!$insertStmt) {
     exit;
 }
 
-// Bind parameters - FIXED: Added missing 's' for notes parameter
 $insertStmt->bind_param(
-    "siissdsssss",         // s=string, i=integer, d=double/decimal (11 characters for 11 values)
-    $booking_id,           // s - 1
-    $user_id,              // i - 2
-    $vehicle_id,           // i - 3
-    $start_date,           // s - 4
-    $end_date,             // s - 5
-    $vehicle['price'],     // d - 6
-    $full_name,            // s - 7
-    $contact_number,       // s - 8
-    $alternative_number,   // s - 9
-    $email,                // s - 10
-    $notes                 // s - 11
+    "siissdsssss",
+    $booking_id,
+    $user_id,
+    $vehicle_id,
+    $start_date,
+    $end_date,
+    $vehicle['price'],
+    $full_name,
+    $contact_number,
+    $alternative_number,
+    $email,
+    $notes
 );
 
 if ($insertStmt->execute()) {
@@ -215,6 +216,36 @@ if ($insertStmt->execute()) {
         'alternative_number' => $alternative_number,
         'notes' => $notes
     ];
+    
+    // ===== ADD EMAIL SENDING HERE =====
+    // Prepare booking data for email
+    $emailData = [
+        'booking_id' => $booking_id,
+        'user_name' => $full_name,
+        'user_email' => $email,
+        'contact_number' => $contact_number,
+        'alternative_number' => $alternative_number,
+        'vehicle_name' => $vehicle['vehicle_name'],
+        'vehicle_number' => $vehicle['vehicle_number'],
+        'vehicle_type' => $vehicle['type_name'],
+        'trip_start' => $start_date,
+        'trip_end' => $end_date,
+        'price' => $vehicle['price'],
+        'notes' => $notes
+    ];
+    
+    // Send confirmation email
+    $emailSent = sendBookingConfirmationEmail($emailData);
+    
+    // Optional: Log email status
+    if ($emailSent) {
+        error_log("Booking confirmation email sent successfully to: " . $email);
+    } else {
+        error_log("Failed to send booking confirmation email to: " . $email);
+        // Note: We don't stop the process if email fails
+        // The booking is still successful
+    }
+    // ===== END EMAIL SENDING =====
     
     header("Location: booking_success.php");
     exit;
