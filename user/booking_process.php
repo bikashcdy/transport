@@ -36,6 +36,16 @@ if ($result->num_rows === 0) {
 $vehicle = $result->fetch_assoc();
 $stmt->close();
 
+// ===== CALCULATE TOTAL PRICE BASED ON DAYS =====
+$start = new DateTime($start_date);
+$end = new DateTime($end_date);
+$days = $start->diff($end)->days;
+if ($days == 0) $days = 1; // Minimum 1 day
+
+$daily_rate = $vehicle['price'];
+$total_price = $daily_rate * $days;
+// ===== END CALCULATION =====
+
 $username = $_SESSION['username'] ?? 'User';
 ?>
 <!DOCTYPE html>
@@ -378,8 +388,10 @@ $username = $_SESSION['username'] ?? 'User';
                 </div>
 
                 <div class="price-box">
-                    <div class="price-label">Total Amount</div>
-                    <div class="price-amount">Rs. <?= number_format($vehicle['price'], 2) ?></div>
+                    <div class="price-label">
+                        Daily Rate: Rs. <?= number_format($daily_rate, 2) ?> × <?= $days ?> day<?= $days > 1 ? 's' : '' ?>
+                    </div>
+                    <div class="price-amount">Rs. <?= number_format($total_price, 2) ?></div>
                 </div>
             </div>
             
@@ -393,6 +405,9 @@ $username = $_SESSION['username'] ?? 'User';
                     <input type="hidden" name="vehicle_id" value="<?= $vehicle_id ?>">
                     <input type="hidden" name="start_date" value="<?= htmlspecialchars($start_date) ?>">
                     <input type="hidden" name="end_date" value="<?= htmlspecialchars($end_date) ?>">
+                    <input type="hidden" name="total_price" value="<?= $total_price ?>">
+                    <input type="hidden" name="daily_rate" value="<?= $daily_rate ?>">
+                    <input type="hidden" name="days" value="<?= $days ?>">
 
                     <div class="form-group">
                         <label class="form-label">Full Name <span class="required">*</span></label>

@@ -183,6 +183,21 @@ if (!$insertStmt) {
     exit;
 }
 
+// Get the calculated total price from the form
+$total_price = floatval($_POST['total_price'] ?? 0);
+$daily_rate = floatval($_POST['daily_rate'] ?? 0);
+$days = intval($_POST['days'] ?? 1);
+
+// Fallback: recalculate if not provided
+if ($total_price == 0) {
+    $start = new DateTime($start_date);
+    $end = new DateTime($end_date);
+    $days = $start->diff($end)->days;
+    if ($days == 0) $days = 1;
+    $total_price = $vehicle['price'] * $days;
+    $daily_rate = $vehicle['price'];
+}
+
 $insertStmt->bind_param(
     "siissdsssss",
     $booking_id,
@@ -190,7 +205,7 @@ $insertStmt->bind_param(
     $vehicle_id,
     $start_date,
     $end_date,
-    $vehicle['price'],
+    $total_price,  // <-- NOW USES CALCULATED TOTAL
     $full_name,
     $contact_number,
     $alternative_number,
@@ -202,37 +217,41 @@ if ($insertStmt->execute()) {
     $insertStmt->close();
     
     // Store booking details in session for success page
-    $_SESSION['booking_success'] = [
-        'booking_id' => $booking_id,
-        'vehicle_name' => $vehicle['vehicle_name'],
-        'vehicle_number' => $vehicle['vehicle_number'],
-        'vehicle_type' => $vehicle['type_name'],
-        'trip_start' => $start_date,
-        'trip_end' => $end_date,
-        'price' => $vehicle['price'],
-        'user_name' => $full_name,
-        'user_email' => $email,
-        'contact_number' => $contact_number,
-        'alternative_number' => $alternative_number,
-        'notes' => $notes
-    ];
+   $_SESSION['booking_success'] = [
+    'booking_id' => $booking_id,
+    'vehicle_name' => $vehicle['vehicle_name'],
+    'vehicle_number' => $vehicle['vehicle_number'],
+    'vehicle_type' => $vehicle['type_name'],
+    'trip_start' => $start_date,
+    'trip_end' => $end_date,
+    'price' => $total_price,  // ← CHANGED
+    'daily_rate' => $daily_rate,  // ← ADDED
+    'days' => $days,  // ← ADDED
+    'user_name' => $full_name,
+    'user_email' => $email,
+    'contact_number' => $contact_number,
+    'alternative_number' => $alternative_number,
+    'notes' => $notes
+];
     
     // ===== ADD EMAIL SENDING HERE =====
     // Prepare booking data for email
-    $emailData = [
-        'booking_id' => $booking_id,
-        'user_name' => $full_name,
-        'user_email' => $email,
-        'contact_number' => $contact_number,
-        'alternative_number' => $alternative_number,
-        'vehicle_name' => $vehicle['vehicle_name'],
-        'vehicle_number' => $vehicle['vehicle_number'],
-        'vehicle_type' => $vehicle['type_name'],
-        'trip_start' => $start_date,
-        'trip_end' => $end_date,
-        'price' => $vehicle['price'],
-        'notes' => $notes
-    ];
+ $emailData = [
+    'booking_id' => $booking_id,
+    'user_name' => $full_name,
+    'user_email' => $email,
+    'contact_number' => $contact_number,
+    'alternative_number' => $alternative_number,
+    'vehicle_name' => $vehicle['vehicle_name'],
+    'vehicle_number' => $vehicle['vehicle_number'],
+    'vehicle_type' => $vehicle['type_name'],
+    'trip_start' => $start_date,
+    'trip_end' => $end_date,
+    'price' => $total_price,  // ← CHANGED
+    'daily_rate' => $daily_rate,  // ← ADDED
+    'days' => $days,  // ← ADDED
+    'notes' => $notes
+];
     
     // Send confirmation email
     $emailSent = sendBookingConfirmationEmail($emailData);

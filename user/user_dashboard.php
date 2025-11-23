@@ -781,15 +781,23 @@ $username = $_SESSION['username'] ?? 'User';
                         </div>
                         <?php endif; ?>
                     </div>
-
-                    <!-- Price Section -->
-                    <div class="price-section">
-                        <div class="price-label">Total Price</div>
-                        <div class="price-amount">
-                            Rs. <?= number_format($vehicle['price'], 2) ?>
-                        </div>
-                    </div>
-
+<!-- Price Section -->
+<div class="price-section">
+    <?php 
+    // Calculate number of days
+    $start = new DateTime($date);
+    $end = new DateTime($end_date);
+    $days = $start->diff($end)->days;
+    if ($days == 0) $days = 1; // Minimum 1 day
+    
+    $daily_rate = $vehicle['price'];
+    $total_price = $daily_rate * $days;
+    ?>
+    <div class="price-label">Total Price</div>
+    <div class="price-amount">
+        Rs. <?= number_format($total_price, 2) ?>
+    </div>
+</div>
                     <!-- Booking Button -->
                     <div class="vehicle-footer">
                         <?php if ($vehicle['is_booked']): ?>

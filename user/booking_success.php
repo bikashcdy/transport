@@ -465,11 +465,16 @@ $username = $_SESSION['username'] ?? 'User';
             </div>
             <?php endif; ?>
 
-            <div class="price-highlight">
-                <div class="price-label">Total Amount</div>
-                <div class="price-value">Rs. <?= number_format($booking['price'], 2) ?></div>
-            </div>
-
+           <div class="price-highlight">
+    <div class="price-label">
+        <?php if (isset($booking['daily_rate']) && isset($booking['days'])): ?>
+            Daily Rate: Rs. <?= number_format($booking['daily_rate'], 2) ?> × <?= $booking['days'] ?> day<?= $booking['days'] > 1 ? 's' : '' ?>
+        <?php else: ?>
+            Total Amount
+        <?php endif; ?>
+    </div>
+    <div class="price-value">Rs. <?= number_format($booking['price'], 2) ?></div>
+</div>
             <div class="important-note">
                 <h4>
                     <i class="fas fa-exclamation-triangle"></i>
