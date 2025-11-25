@@ -630,7 +630,7 @@ $username = $_SESSION['username'] ?? 'User';
                     
                     <div class="date-input-wrapper">
                         <label class="date-label">Trip Ends</label>
-                        <div class="input-group">
+                        <div class="input-group"> 
                             <i class="fa-solid fa-calendar-days"></i>
                             <input
                                 type="date"
@@ -878,6 +878,33 @@ $username = $_SESSION['username'] ?? 'User';
     </footer>
 
     <script>
+       
+        // Update end date minimum when start date changes
+        document.getElementById('travelDate').addEventListener('change', function() {
+            document.getElementById('endDate').min = this.value;
+            if (document.getElementById('endDate').value && document.getElementById('endDate').value < this.value) {
+                document.getElementById('endDate').value = this.value;
+            }
+        });
+
+        // Make calendar icons clickable to open date picker
+        document.querySelectorAll('.input-group i.fa-calendar-days').forEach(function(icon) {
+            icon.style.cursor = 'pointer';
+            icon.addEventListener('click', function() {
+                // Find the date input in the same input-group
+                const dateInput = this.parentElement.querySelector('input[type="date"]');
+                if (dateInput) {
+                    try {
+                        dateInput.showPicker(); // Modern browsers support this method
+                    } catch (e) {
+                        // Fallback for older browsers
+                        dateInput.focus();
+                        dateInput.click();
+                    }
+                }
+            });
+        });
+
         // Update end date minimum when start date changes
         document.getElementById('travelDate').addEventListener('change', function() {
             document.getElementById('endDate').min = this.value;
