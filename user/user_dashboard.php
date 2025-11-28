@@ -34,6 +34,7 @@ if ($date !== '' && $end_date !== '') {
             OR (DATE(trip_start) <= ? AND DATE(trip_end) >= ?)
         )
     ";
+
     
     $bookedStmt = $conn->prepare($bookedSql);
     if ($bookedStmt) {
@@ -53,36 +54,49 @@ if ($date !== '' && $end_date !== '') {
     }
     
     // Query to get ALL vehicles by type with their availability status
-    $sql = "
-        SELECT 
-            v.id,
-            v.vehicle_number,
-            v.vehicle_name,
-            v.capacity,
-            v.facilities,
-            v.price,
-            v.status,
-            vt.type_name AS vehicle_type
-        FROM vehicles v
-        JOIN vehicle_types vt ON v.vehicle_type_id = vt.id
-        WHERE vt.type_name = ?
-        AND v.status = 'available'
-        ORDER BY v.vehicle_name ASC
-    ";
+   $sql = "
+    SELECT 
+        v.id,
+        v.vehicle_number,
+        v.vehicle_name,
+        v.capacity,
+        v.facilities,
+        v.price,
+        v.status,
+        vt.type_name AS vehicle_type
+    FROM vehicles v
+    JOIN vehicle_types vt ON v.vehicle_type_id = vt.id
+    WHERE vt.type_name = ?
+    AND v.status = 'available'
+";
 
-    $stmt = $conn->prepare($sql);
-    if ($stmt) {
+// Add condition to exclude booked vehicles
+if (!empty($bookedVehicleIds)) {
+    $placeholders = implode(',', array_fill(0, count($bookedVehicleIds), '?'));
+    $sql .= " AND v.id NOT IN ($placeholders)";
+}
+
+$sql .= " ORDER BY v.vehicle_name ASC";
+
+   $stmt = $conn->prepare($sql);
+if ($stmt) {
+    // Bind parameters
+    if (!empty($bookedVehicleIds)) {
+        $types = str_repeat('i', count($bookedVehicleIds));
+        $params = array_merge([$type], $bookedVehicleIds);
+        $stmt->bind_param("s" . $types, ...$params);
+    } else {
         $stmt->bind_param("s", $type);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        
-        while ($row = $result->fetch_assoc()) {
-            // Mark if vehicle is booked for selected dates
-            $row['is_booked'] = in_array($row['id'], $bookedVehicleIds);
-            $vehiclesData[] = $row;
-        }
-        $stmt->close();
     }
+    
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    while ($row = $result->fetch_assoc()) {
+        $vehiclesData[] = $row;
+    }
+    $stmt->close();
+   }
 }
 
 // Get username for display
@@ -100,7 +114,6 @@ $username = $_SESSION['username'] ?? 'User';
     />
     <link rel="stylesheet" href="user_dashboard.css" />
     <link rel="shortcut icon" href="favi.png" type="image/x-icon" />
-    <link rel="stylesheet" href="route_card.css">
     <style>
         /* Enhanced Vehicle Card Styles */
         .vehicles-section {
@@ -661,13 +674,11 @@ $username = $_SESSION['username'] ?? 'User';
                     <i class="fas fa-car"></i> Available <?= ucfirst(htmlspecialchars($type)) ?> Vehicles
                 </h2>
 
-                <?php if (!empty($vehiclesData)): ?>
-                <p class="results-count">
-                    <i class="fas fa-info-circle"></i>
-                    Showing <?= count($vehiclesData) ?> vehicle<?= count($vehiclesData) != 1 ? 's' : '' ?> 
-                    (<?= count(array_filter($vehiclesData, function($v) { return !$v['is_booked']; })) ?> available, 
-                    <?= count(array_filter($vehiclesData, function($v) { return $v['is_booked']; })) ?> booked)
-                </p>
+               <?php if (!empty($vehiclesData)): ?>
+<p class="results-count">
+    <i class="fas fa-info-circle"></i>
+    Showing <?= count($vehiclesData) ?> available vehicle<?= count($vehiclesData) != 1 ? 's' : '' ?>
+</p>
                 <?php else: ?>
                 <p class="results-count">
                     <i class="fas fa-exclamation-circle"></i> No <?= htmlspecialchars($type) ?> vehicles found.
@@ -678,7 +689,7 @@ $username = $_SESSION['username'] ?? 'User';
             <?php if (!empty($vehiclesData)): ?>
             <div class="vehicle-grid">
                 <?php foreach ($vehiclesData as $vehicle): ?>
-                <div class="vehicle-card <?= $vehicle['is_booked'] ? 'booked' : '' ?>">
+                <div class="vehicle-card">
                     <!-- Vehicle Header -->
                     <div class="vehicle-header">
                         <div class="vehicle-icon">
@@ -698,30 +709,15 @@ $username = $_SESSION['username'] ?? 'User';
                         </div>
                     </div>
 
-                    <!-- Vehicle Details -->
-                    <div class="vehicle-details">
-                        <!-- Date Range Display -->
-                        <div class="date-range-display">
-                            <div class="date-range-label">Your Booking Period</div>
-                            <div class="date-range-dates">
-                                <span><?= date('M d, Y', strtotime($date)) ?></span>
-                                <i class="fas fa-arrow-right"></i>
-                                <span><?= date('M d, Y', strtotime($end_date)) ?></span>
-                            </div>
-                        </div>
+                   <!-- Vehicle Details -->
+<div class="vehicle-details">
+    <!-- Date Range Display section removed -->
 
-                        <!-- Status Banner -->
-                        <?php if ($vehicle['is_booked']): ?>
-                        <div class="status-banner status-booked">
-                            <i class="fas fa-times-circle"></i>
-                            <span>Already Booked for These Dates</span>
-                        </div>
-                        <?php else: ?>
-                        <div class="status-banner status-available">
-                            <i class="fas fa-check-circle"></i>
-                            <span>Available for These Dates</span>
-                        </div>
-                        <?php endif; ?>
+                       <!-- Status Banner -->
+<div class="status-banner status-available">
+    <i class="fas fa-check-circle"></i>
+    <span>Available for These Dates</span>
+</div>
 
                         <!-- Info Grid -->
                         <div class="vehicle-info-grid">
@@ -798,24 +794,17 @@ $username = $_SESSION['username'] ?? 'User';
         Rs. <?= number_format($total_price, 2) ?>
     </div>
 </div>
-                    <!-- Booking Button -->
-                    <div class="vehicle-footer">
-                        <?php if ($vehicle['is_booked']): ?>
-                        <button class="btn-book-now" style="background: linear-gradient(135deg, #a0aec0 0%, #718096 100%); cursor: not-allowed;" disabled>
-                            <i class="fas fa-ban"></i> Not Available
-                        </button>
-                        <?php else: ?>
-                       <!-- NEW -->
-                        <form action="booking_process.php" method="POST">
-                            <input type="hidden" name="vehicle_id" value="<?= $vehicle['id'] ?>" />
-                            <input type="hidden" name="start_date" value="<?= htmlspecialchars($date) ?>" />
-                            <input type="hidden" name="end_date" value="<?= htmlspecialchars($end_date) ?>" />
-                            <button type="submit" class="btn-book-now">
-                                <i class="fas fa-ticket-alt"></i> Book This Vehicle
-                            </button>
-                        </form>
-                        <?php endif; ?>
-                    </div>
+                  <!-- Booking Button -->
+<div class="vehicle-footer">
+    <form action="booking_process.php" method="POST">
+        <input type="hidden" name="vehicle_id" value="<?= $vehicle['id'] ?>" />
+        <input type="hidden" name="start_date" value="<?= htmlspecialchars($date) ?>" />
+        <input type="hidden" name="end_date" value="<?= htmlspecialchars($end_date) ?>" />
+        <button type="submit" class="btn-book-now">
+            <i class="fas fa-ticket-alt"></i> Book This Vehicle
+        </button>
+    </form>
+</div>
                 </div>
                 <?php endforeach; ?>
             </div>

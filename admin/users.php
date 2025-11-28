@@ -3,56 +3,95 @@ $pageTitle = "Users";
 
 include '../db.php';
 
+// Add this at the top to prevent resubmission
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    session_start();
+}
 
 if (isset($_POST['add'])) {
-    $name = $_POST['name'];
-    $email = $_POST['email'];
+    $name = trim($_POST['name']);
+    $email = trim($_POST['email']);
     $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
     $role = $_POST['role'];
     
-    
     $stmt = $conn->prepare("INSERT INTO users (name, email, password, user_type) VALUES (?, ?, ?, ?)");
     $stmt->bind_param("ssss", $name, $email, $password, $role);
-    $stmt->execute();
+    
+    if ($stmt->execute()) {
+        $_SESSION['success'] = "User added successfully!";
+    } else {
+        $_SESSION['error'] = "Error adding user: " . $stmt->error;
+    }
+    $stmt->close();
     
     header("Location: users.php");
     exit();
 }
-
 
 if (isset($_POST['update'])) {
-    $id = $_POST['id'];
-    $name = $_POST['name'];
-    $email = $_POST['email'];
+    $id = intval($_POST['id']);
+    $name = trim($_POST['name']);
+    $email = trim($_POST['email']);
     $role = $_POST['role']; 
     
- 
     $stmt = $conn->prepare("UPDATE users SET name=?, email=?, user_type=? WHERE id=?");
     $stmt->bind_param("sssi", $name, $email, $role, $id);
-    $stmt->execute();
+    
+    if ($stmt->execute()) {
+        $_SESSION['success'] = "User updated successfully!";
+    } else {
+        $_SESSION['error'] = "Error updating user: " . $stmt->error;
+    }
+    $stmt->close();
     
     header("Location: users.php");
     exit();
 }
 
-
 if (isset($_POST['delete'])) {
-    $id = $_POST['id'];
+    $id = intval($_POST['id']);
     
     $stmt = $conn->prepare("DELETE FROM users WHERE id=?");
     $stmt->bind_param("i", $id);
-    $stmt->execute();
+    
+    if ($stmt->execute()) {
+        $_SESSION['success'] = "User deleted successfully!";
+    } else {
+        $_SESSION['error'] = "Error deleting user: " . $stmt->error;
+    }
+    $stmt->close();
     
     header("Location: users.php");
     exit();
 }
 
-
+// Fetch users
 $result = $conn->query("SELECT * FROM users ORDER BY created_at DESC");
+
+if (!$result) {
+    die("Error fetching users: " . $conn->error);
+}
 
 function pageContent()
 {
     global $result, $pageTitle;
+    
+    // Display success/error messages
+    if (isset($_SESSION['success'])) {
+        echo '<div class="alert alert-success alert-dismissible fade show" role="alert">';
+        echo htmlspecialchars($_SESSION['success']);
+        echo '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+        echo '</div>';
+        unset($_SESSION['success']);
+    }
+    
+    if (isset($_SESSION['error'])) {
+        echo '<div class="alert alert-danger alert-dismissible fade show" role="alert">';
+        echo htmlspecialchars($_SESSION['error']);
+        echo '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+        echo '</div>';
+        unset($_SESSION['error']);
+    }
     ?>
 
 <div class="mb-3">
@@ -60,7 +99,6 @@ function pageContent()
         <i class="fas fa-plus"></i> Add New User
     </button>
 </div>
-
 
 <table class="table table-striped">
     <thead>
@@ -74,8 +112,9 @@ function pageContent()
         </tr>
     </thead>
     <tbody>
-    <?php $i = 1;
-        while ($row = $result->fetch_assoc()): ?>
+    <?php 
+    $i = 1;
+    while ($row = $result->fetch_assoc()): ?>
     <tr>
         <td><?= $i++; ?></td>
         <td><?= htmlspecialchars($row['name']); ?></td>
@@ -99,7 +138,7 @@ function pageContent()
         </td>
     </tr>
 
-   
+    <!-- View Modal -->
     <div class="modal fade" id="viewModal<?= $row['id']; ?>" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -119,13 +158,12 @@ function pageContent()
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-  
                 </div>
-          </div>
+            </div>
         </div>
     </div>
 
-
+    <!-- Edit Modal -->
     <div class="modal fade" id="editModal<?= $row['id']; ?>" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -164,7 +202,7 @@ function pageContent()
         </div>
     </div>
 
-   
+    <!-- Delete Modal -->
     <div class="modal fade" id="deleteModal<?= $row['id']; ?>" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -191,7 +229,7 @@ function pageContent()
     </tbody>
 </table>
 
-
+<!-- Add User Modal -->
 <div class="modal fade" id="addModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -222,7 +260,6 @@ function pageContent()
                         <select name="role" class="form-control" required>
                             <option value="user">User</option>
                             <option value="admin">Admin</option>
- 
                         </select>
                     </div>
                 </div>

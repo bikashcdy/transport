@@ -7,66 +7,62 @@ CREATE TABLE vehicle_types (
 INSERT INTO vehicle_types (type_name) VALUES
 ('Bus'), ('Truck'), ('Van'), ('Car');
 
-
 CREATE TABLE vehicles (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+    id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
     vehicle_number VARCHAR(50) NOT NULL,
-    vehicle_type_id INT NOT NULL,
-    capacity INT NOT NULL,
+    vehicle_name VARCHAR(255),
+    vehicle_type_id INT(11) NOT NULL,
+    capacity INT(11) NOT NULL,
+    price DECIMAL(10,2) NOT NULL,
+    facilities TEXT,
     status VARCHAR(20) DEFAULT 'Available',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (vehicle_type_id) REFERENCES vehicle_types(id)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+CREATE TABLE users (
+    id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    user_type ENUM('user','admin') NOT NULL DEFAULT 'user',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
 
 
 CREATE TABLE reports (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    report_name VARCHAR(100),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
+    id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    report_type VARCHAR(50) NOT NULL,
+    report_data TEXT,
+    generated_by INT(11) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (generated_by) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
 
 CREATE TABLE bookings (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+    id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
     booking_id VARCHAR(50) UNIQUE,
-    user_id INT NOT NULL,
-    vehicle_id INT NOT NULL,
-    origin VARCHAR(100) NOT NULL,
-    destination VARCHAR(100) NOT NULL,
-    departure_time DATETIME NOT NULL,
-    arrival_time DATETIME NOT NULL,
+    user_id INT(11) NOT NULL,
+    vehicle_id INT(11) NOT NULL,
     status ENUM('pending','confirmed','completed','cancelled') DEFAULT 'pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    trip_start VARCHAR(100),
+    trip_end VARCHAR(100),
+    price DECIMAL(10,2) NOT NULL,
+    user_name VARCHAR(100),
+    contact_number VARCHAR(20),
+    alternative_number VARCHAR(20),
+    email VARCHAR(100),
+    notes TEXT,
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (vehicle_id) REFERENCES vehicles(id)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
--- Table for main routes
-CREATE TABLE ways (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    vehicle_id INT NOT NULL,
-    origin VARCHAR(100) NOT NULL,
-    destination VARCHAR(100) NOT NULL,
-    departure_time TIME NOT NULL,
-    arrival_time TIME NOT NULL,
-    price DECIMAL(10,2) DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (vehicle_id) REFERENCES vehicles(id)
-);
-
--- Table for transit stops along a way
-CREATE TABLE way_transits (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    way_id INT NOT NULL,
-    transit_point VARCHAR(100) NOT NULL,
-    transit_duration INT DEFAULT 0, -- in minutes
-    transit_time TIME NOT NULL, 
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (way_id) REFERENCES ways(id) ON DELETE CASCADE
-);
 
 

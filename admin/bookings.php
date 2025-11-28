@@ -4,6 +4,8 @@ ob_start(); // Start output buffering
 $pageTitle = "Bookings";
 include '../db.php';
 
+ini_set('max_execution_time', 120); // 2 minutes
+
 require '../libs/PHPMailer/src/PHPMailer.php';
 require '../libs/PHPMailer/src/SMTP.php';
 require '../libs/PHPMailer/src/Exception.php';
@@ -152,6 +154,10 @@ function sendBookingConfirmationEmail($userEmail, $userName, $bookingId)
         $mail->Password = 'nodc knlq hxgf inul';
         $mail->SMTPSecure = 'tls';
         $mail->Port = 587;
+    $mail->Timeout = 60;         // 60 seconds for SMTP connection
+$mail->SMTPKeepAlive = false; // optional, prevents hanging
+
+
         
         // Set timeout for SMTP connection
         $mail->Timeout = 5;

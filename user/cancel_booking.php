@@ -15,7 +15,7 @@ if (isset($_POST['cancel_booking'])) {
     $booking_id = $_POST['booking_id'];
     
     // Verify booking belongs to user and is not already cancelled
-    $verifyQuery = "SELECT status FROM bookings WHERE booking_id = ? AND user_id = ?";
+    $verifyQuery = "SELECT status, created_at FROM bookings WHERE booking_id = ? AND user_id = ?";
     $verifyStmt = $conn->prepare($verifyQuery);
     $verifyStmt->bind_param("si", $booking_id, $user_id);
     $verifyStmt->execute();
@@ -23,7 +23,18 @@ if (isset($_POST['cancel_booking'])) {
     
     if ($verifyResult->num_rows > 0) {
         $booking = $verifyResult->fetch_assoc();
-        
+
+        // Check 5-minute cancellation window
+        $bookingTime = strtotime($booking['created_at']);
+        $currentTime = time();
+        $timeDiff = $currentTime - $bookingTime; // seconds
+
+        if ($timeDiff > 300) { // 300 seconds = 5 minutes (change to 60 for 1 minute testing)
+            $_SESSION['error'] = "You can only cancel within 5 minutes after booking.";
+            header("Location: cancel_booking.php");
+            exit;
+        }
+
         if ($booking['status'] === 'cancelled') {
             $_SESSION['error'] = "This booking is already cancelled.";
         } else {
@@ -78,6 +89,26 @@ $stmt->execute();
 $result = $stmt->get_result();
 $bookings = $result->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
+
+// Calculate cancellation availability for each booking
+// NOTE: 300 seconds = 5 minutes. Change to 60 for 1 minute testing if needed.
+foreach ($bookings as &$booking) {
+    $createdAt = strtotime($booking['created_at']);
+    $currentTime = time();
+    $timeDiff = $currentTime - $createdAt;
+    
+    // Can cancel if within 5 minutes (300 seconds) and not already cancelled/completed
+    $booking['can_cancel'] = ($timeDiff <= 300) && 
+                             ($booking['status'] !== 'cancelled') && 
+                             ($booking['status'] !== 'completed');
+    
+    // Calculate time remaining for cancellation
+    $timeRemaining = max(0, 300 - $timeDiff);
+    $booking['time_remaining'] = $timeRemaining;
+    $booking['minutes_remaining'] = floor($timeRemaining / 60);
+    $booking['seconds_remaining'] = $timeRemaining % 60;
+}
+unset($booking); // Break reference
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -395,7 +426,7 @@ $stmt->close();
             gap: 8px;
         }
 
-        .btn-cancel:hover {
+        .btn-cancel:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 4px 15px rgba(245, 101, 101, 0.4);
         }
@@ -404,6 +435,61 @@ $stmt->close();
             background: #cbd5e0;
             cursor: not-allowed;
             transform: none;
+        }
+
+        .countdown-timer {
+            font-size: 0.85rem;
+            color: #f56565;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: #fff5f5;
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid #feb2b2;
+        }
+
+        .countdown-timer .time-value {
+            font-family: 'Courier New', monospace;
+            font-size: 1rem;
+        }
+
+        .countdown-timer.warning {
+            background: #fffbeb;
+            border-color: #fbbf24;
+            color: #b45309;
+        }
+
+        .countdown-timer.critical {
+            background: #fee2e2;
+            border-color: #f87171;
+            color: #991b1b;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .status-info {
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .cancelled-info {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .completed-info {
+            background: #d1fae5;
+            color: #065f46;
         }
 
         .empty-state {
@@ -431,7 +517,6 @@ $stmt->close();
             margin-bottom: 25px;
         }
 
-        /* Confirmation Modal */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -637,18 +722,43 @@ $stmt->close();
                         <i class="fas fa-clock"></i> 
                         Booked on <?= date('M d, Y - h:i A', strtotime($booking['created_at'])) ?>
                     </div>
+                    
                     <?php if ($booking['status'] !== 'cancelled' && $booking['status'] !== 'completed'): ?>
-                    <button 
-                        class="btn-cancel" 
-                        onclick="confirmCancel('<?= htmlspecialchars($booking['booking_id']) ?>')"
-                    >
-                        <i class="fas fa-times-circle"></i> Cancel Booking
-                    </button>
-                    <?php else: ?>
-                    <button class="btn-cancel" disabled>
-                        <i class="fas fa-ban"></i> 
-                        <?= $booking['status'] === 'cancelled' ? 'Cancelled' : 'Completed' ?>
-                    </button>
+                        <?php if ($booking['can_cancel']): ?>
+                            <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end;">
+                                <button 
+                                    class="btn-cancel" 
+                                    onclick="confirmCancel('<?= htmlspecialchars($booking['booking_id']) ?>')"
+                                    id="cancel-btn-<?= htmlspecialchars($booking['booking_id']) ?>"
+                                >
+                                    <i class="fas fa-times-circle"></i> Cancel Booking
+                                </button>
+                                <div class="countdown-timer" 
+                                     id="timer-<?= htmlspecialchars($booking['booking_id']) ?>"
+                                     data-booking-id="<?= htmlspecialchars($booking['booking_id']) ?>"
+                                     data-created-at="<?= strtotime($booking['created_at']) ?>"
+                                     data-debug-created="<?= $booking['created_at'] ?>"
+                                     data-debug-timestamp="<?= strtotime($booking['created_at']) ?>"
+                                     data-debug-current="<?= time() ?>">
+                                    <i class="fas fa-hourglass-half"></i>
+                                    <span class="timer-text">
+                                        Time left: <strong><span class="time-value"><?= sprintf('%d:%02d', $booking['minutes_remaining'], $booking['seconds_remaining']) ?></span></strong>
+                                    </span>
+                                </div>
+                            </div>
+                        <?php else: ?>
+                            <button class="btn-cancel" disabled title="Cancellation window expired (5 minutes)">
+                                <i class="fas fa-ban"></i> Cancellation Expired
+                            </button>
+                        <?php endif; ?>
+                    <?php elseif ($booking['status'] === 'cancelled'): ?>
+                        <div class="status-info cancelled-info">
+                            <i class="fas fa-times-circle"></i> Booking Cancelled
+                        </div>
+                    <?php elseif ($booking['status'] === 'completed'): ?>
+                        <div class="status-info completed-info">
+                            <i class="fas fa-check-circle"></i> Trip Completed
+                        </div>
                     <?php endif; ?>
                 </div>
             </div>
@@ -689,6 +799,64 @@ $stmt->close();
     </div>
 
     <script>
+        // Real-time countdown timer
+        function updateCountdowns() {
+            const timers = document.querySelectorAll('.countdown-timer');
+            
+            timers.forEach(timer => {
+                const bookingId = timer.dataset.bookingId;
+                const createdAt = parseInt(timer.dataset.createdAt);
+                const currentTime = Math.floor(Date.now() / 1000);
+                const elapsed = currentTime - createdAt;
+                const timeLeft = Math.max(0, 300 - elapsed); // 300 seconds = 5 minutes
+                
+                // Debug: Log values to console
+                console.log('Booking:', bookingId);
+                console.log('Created At (timestamp):', createdAt);
+                console.log('Current Time:', currentTime);
+                console.log('Elapsed:', elapsed, 'seconds');
+                console.log('Time Left:', timeLeft, 'seconds');
+                console.log('---');
+                
+                if (timeLeft > 0) {
+                    const minutes = Math.floor(timeLeft / 60);
+                    const seconds = timeLeft % 60;
+                    const timeValue = timer.querySelector('.time-value');
+                    
+                    if (timeValue) {
+                        timeValue.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                    }
+                    
+                    // Change color based on time remaining
+                    timer.classList.remove('warning', 'critical');
+                    if (timeLeft <= 60) {
+                        timer.classList.add('critical');
+                    } else if (timeLeft <= 120) {
+                        timer.classList.add('warning');
+                    }
+                } else {
+                    // Time expired - disable button and update UI
+                    const cancelBtn = document.getElementById(`cancel-btn-${bookingId}`);
+                    if (cancelBtn && !cancelBtn.disabled) {
+                        cancelBtn.disabled = true;
+                        cancelBtn.innerHTML = '<i class="fas fa-ban"></i> Cancellation Expired';
+                        cancelBtn.title = 'Cancellation window expired (5 minutes)';
+                        timer.innerHTML = '<i class="fas fa-clock"></i> <span style="color: #64748b;">Cancellation period ended</span>';
+                        timer.classList.remove('warning', 'critical');
+                        timer.style.background = '#f1f5f9';
+                        timer.style.borderColor = '#cbd5e0';
+                        timer.style.color = '#64748b';
+                    }
+                }
+            });
+        }
+
+        // Update every second
+        setInterval(updateCountdowns, 1000);
+
+        // Initial update
+        updateCountdowns();
+
         function confirmCancel(bookingId) {
             document.getElementById('cancelBookingId').value = bookingId;
             document.getElementById('cancelModal').classList.add('active');
@@ -701,6 +869,13 @@ $stmt->close();
         // Close modal on overlay click
         document.getElementById('cancelModal').addEventListener('click', function(e) {
             if (e.target === this) {
+                closeModal();
+            }
+        });
+
+        // Close modal on ESC key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
                 closeModal();
             }
         });

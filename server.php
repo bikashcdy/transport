@@ -87,7 +87,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $row = $result->fetch_assoc();
             if (password_verify($password, $row['password'])) {
                 $_SESSION['user_id'] = $row['id'];
-                $_SESSION['user_name'] = $row['name'];
+              $_SESSION['username'] = $row['name'];
                 $_SESSION['user_type'] = $row['user_type'];
 
                 if ($_SESSION['user_type'] === 'admin') {
