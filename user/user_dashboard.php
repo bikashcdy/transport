@@ -113,7 +113,7 @@ $username = $_SESSION['username'] ?? 'User';
         href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css"
     />
     <link rel="stylesheet" href="user_dashboard.css" />
-    <link rel="shortcut icon" href="favi.png" type="image/x-icon" />
+    <link rel="shortcut icon" href="favi.png" type="image/x-icon" />    
     <style>
         /* Enhanced Vehicle Card Styles */
         .vehicles-section {

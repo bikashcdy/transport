@@ -102,13 +102,31 @@ foreach ($bookings as &$booking) {
                              ($booking['status'] !== 'cancelled') && 
                              ($booking['status'] !== 'completed');
     
-    // Calculate time remaining for cancellation
+    // Calculate time remaining for cancellation IN SECONDS
     $timeRemaining = max(0, 300 - $timeDiff);
     $booking['time_remaining'] = $timeRemaining;
+    
+    // Convert to minutes and seconds for display
     $booking['minutes_remaining'] = floor($timeRemaining / 60);
     $booking['seconds_remaining'] = $timeRemaining % 60;
+    
+    // Store the actual timestamps for JavaScript
+    $booking['created_at_timestamp'] = $createdAt;
+    $booking['current_time_timestamp'] = $currentTime;
 }
 unset($booking); // Break reference
+// DEBUG: Check what values we're getting
+echo "<!-- DEBUG INFO:\n";
+if (isset($bookings[0])) {
+    $testBooking = $bookings[0];
+    echo "created_at from DB: " . $testBooking['created_at'] . "\n";
+    echo "created_at_timestamp: " . $testBooking['created_at_timestamp'] . "\n";
+    echo "current_time_timestamp: " . $testBooking['current_time_timestamp'] . "\n";
+    echo "Time difference: " . ($testBooking['current_time_timestamp'] - $testBooking['created_at_timestamp']) . " seconds\n";
+    echo "Minutes remaining: " . $testBooking['minutes_remaining'] . "\n";
+    echo "Seconds remaining: " . $testBooking['seconds_remaining'] . "\n";
+}
+echo "-->\n";
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -118,461 +136,9 @@ unset($booking); // Break reference
     <title>My Bookings | BookingNepal</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
     <link rel="shortcut icon" href="favi.png" type="image/x-icon">
+    <link rel="stylesheet" href="cancel_booking.css">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .header {
-            background: white;
-            padding: 20px 30px;
-            border-radius: 15px;
-            margin-bottom: 30px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 20px;
-        }
-
-        .logo-section {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .logo {
-            width: 50px;
-            height: 50px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 1.5rem;
-        }
-
-        .logo-section h2 {
-            color: #2d3748;
-            font-size: 1.5rem;
-        }
-
-        .header-actions {
-            display: flex;
-            gap: 15px;
-            align-items: center;
-        }
-
-        .user-info {
-            color: #2d3748;
-            font-weight: 600;
-        }
-
-        .btn {
-            padding: 12px 24px;
-            border-radius: 10px;
-            text-decoration: none;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            border: none;
-            cursor: pointer;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn-secondary {
-            background: #e2e8f0;
-            color: #2d3748;
-        }
-
-        .btn-secondary:hover {
-            background: #cbd5e0;
-        }
-
-        .page-title {
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            margin-bottom: 30px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-            text-align: center;
-        }
-
-        .page-title h1 {
-            font-size: 2rem;
-            color: #2d3748;
-            margin-bottom: 10px;
-        }
-
-        .page-title p {
-            color: #64748b;
-            font-size: 1.1rem;
-        }
-
-        .alert {
-            padding: 15px 20px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-weight: 600;
-        }
-
-        .alert-success {
-            background: #d1fae5;
-            color: #065f46;
-            border: 2px solid #10b981;
-        }
-
-        .alert-error {
-            background: #fee2e2;
-            color: #991b1b;
-            border: 2px solid #ef4444;
-        }
-
-        .bookings-grid {
-            display: grid;
-            gap: 25px;
-        }
-
-        .booking-card {
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
-            transition: all 0.3s ease;
-        }
-
-        .booking-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
-        }
-
-        .booking-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 15px;
-        }
-
-        .booking-header.cancelled {
-            background: linear-gradient(135deg, #a0aec0 0%, #718096 100%);
-        }
-
-        .booking-header.confirmed {
-            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
-        }
-
-        .booking-header.completed {
-            background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
-        }
-
-        .booking-id {
-            font-size: 1.3rem;
-            font-weight: 700;
-            font-family: 'Courier New', monospace;
-        }
-
-        .status-badge {
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            background: rgba(255, 255, 255, 0.3);
-            text-transform: uppercase;
-        }
-
-        .booking-body {
-            padding: 25px;
-        }
-
-        .booking-info {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-
-        .info-block {
-            display: flex;
-            gap: 15px;
-            align-items: start;
-        }
-
-        .info-icon {
-            width: 45px;
-            height: 45px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 1.2rem;
-            flex-shrink: 0;
-        }
-
-        .info-content h4 {
-            font-size: 0.85rem;
-            color: #64748b;
-            text-transform: uppercase;
-            font-weight: 600;
-            margin-bottom: 5px;
-        }
-
-        .info-content p {
-            font-size: 1.05rem;
-            color: #2d3748;
-            font-weight: 600;
-        }
-
-        .price-badge {
-            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
-            color: white;
-            padding: 15px 20px;
-            border-radius: 12px;
-            text-align: center;
-            margin: 20px 0;
-        }
-
-        .price-badge .label {
-            font-size: 0.9rem;
-            opacity: 0.9;
-        }
-
-        .price-badge .amount {
-            font-size: 1.8rem;
-            font-weight: 700;
-        }
-
-        .notes-section {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 10px;
-            margin-top: 15px;
-        }
-
-        .notes-section h4 {
-            color: #2d3748;
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .notes-section p {
-            color: #64748b;
-            line-height: 1.6;
-        }
-
-        .booking-footer {
-            padding: 20px 25px;
-            background: #f8f9fa;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 15px;
-        }
-
-        .booking-date {
-            color: #64748b;
-            font-size: 0.9rem;
-        }
-
-        .btn-cancel {
-            background: linear-gradient(135deg, #f56565 0%, #c53030 100%);
-            color: white;
-            padding: 12px 24px;
-            border-radius: 10px;
-            border: none;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .btn-cancel:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(245, 101, 101, 0.4);
-        }
-
-        .btn-cancel:disabled {
-            background: #cbd5e0;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .countdown-timer {
-            font-size: 0.85rem;
-            color: #f56565;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            background: #fff5f5;
-            padding: 6px 12px;
-            border-radius: 8px;
-            border: 1px solid #feb2b2;
-        }
-
-        .countdown-timer .time-value {
-            font-family: 'Courier New', monospace;
-            font-size: 1rem;
-        }
-
-        .countdown-timer.warning {
-            background: #fffbeb;
-            border-color: #fbbf24;
-            color: #b45309;
-        }
-
-        .countdown-timer.critical {
-            background: #fee2e2;
-            border-color: #f87171;
-            color: #991b1b;
-            animation: pulse 1s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
-        }
-
-        .status-info {
-            padding: 12px 20px;
-            border-radius: 10px;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .cancelled-info {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-
-        .completed-info {
-            background: #d1fae5;
-            color: #065f46;
-        }
-
-        .empty-state {
-            background: white;
-            padding: 60px 20px;
-            border-radius: 15px;
-            text-align: center;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-        }
-
-        .empty-icon {
-            font-size: 4rem;
-            color: #cbd5e0;
-            margin-bottom: 20px;
-        }
-
-        .empty-state h3 {
-            font-size: 1.5rem;
-            color: #2d3748;
-            margin-bottom: 10px;
-        }
-
-        .empty-state p {
-            color: #64748b;
-            margin-bottom: 25px;
-        }
-
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.6);
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            padding: 20px;
-        }
-
-        .modal-overlay.active {
-            display: flex;
-        }
-
-        .modal {
-            background: white;
-            border-radius: 15px;
-            max-width: 500px;
-            width: 100%;
-            padding: 30px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        }
-
-        .modal h3 {
-            color: #2d3748;
-            margin-bottom: 15px;
-            font-size: 1.5rem;
-        }
-
-        .modal p {
-            color: #64748b;
-            margin-bottom: 25px;
-            line-height: 1.6;
-        }
-
-        .modal-actions {
-            display: flex;
-            gap: 15px;
-            justify-content: flex-end;
-        }
-
-        @media (max-width: 768px) {
-            .header {
-                flex-direction: column;
-                text-align: center;
-            }
-
-            .booking-info {
-                grid-template-columns: 1fr;
-            }
-
-            .booking-footer {
-                flex-direction: column;
-            }
-        }
+       
     </style>
 </head>
 <body>
@@ -733,18 +299,18 @@ unset($booking); // Break reference
                                 >
                                     <i class="fas fa-times-circle"></i> Cancel Booking
                                 </button>
-                                <div class="countdown-timer" 
-                                     id="timer-<?= htmlspecialchars($booking['booking_id']) ?>"
-                                     data-booking-id="<?= htmlspecialchars($booking['booking_id']) ?>"
-                                     data-created-at="<?= strtotime($booking['created_at']) ?>"
-                                     data-debug-created="<?= $booking['created_at'] ?>"
-                                     data-debug-timestamp="<?= strtotime($booking['created_at']) ?>"
-                                     data-debug-current="<?= time() ?>">
-                                    <i class="fas fa-hourglass-half"></i>
-                                    <span class="timer-text">
-                                        Time left: <strong><span class="time-value"><?= sprintf('%d:%02d', $booking['minutes_remaining'], $booking['seconds_remaining']) ?></span></strong>
-                                    </span>
-                                </div>
+                             <div class="countdown-timer" 
+     id="timer-<?= htmlspecialchars($booking['booking_id']) ?>"
+     data-booking-id="<?= htmlspecialchars($booking['booking_id']) ?>"
+     data-created-at="<?= intval($booking['created_at_timestamp']) ?>"
+     data-debug-current="<?= intval($booking['current_time_timestamp']) ?>"
+     data-debug-raw-created="<?= htmlspecialchars($booking['created_at']) ?>"
+     data-debug-diff="<?= intval($booking['current_time_timestamp'] - $booking['created_at_timestamp']) ?>">
+    <i class="fas fa-hourglass-half"></i>
+    <span class="timer-text">
+        Time left: <strong><span class="time-value"><?= sprintf('%d:%02d', $booking['minutes_remaining'], $booking['seconds_remaining']) ?></span></strong>
+    </span>
+</div>
                             </div>
                         <?php else: ?>
                             <button class="btn-cancel" disabled title="Cancellation window expired (5 minutes)">
@@ -799,86 +365,95 @@ unset($booking); // Break reference
     </div>
 
     <script>
-        // Real-time countdown timer
-        function updateCountdowns() {
-            const timers = document.querySelectorAll('.countdown-timer');
+  console.log('=== BOOKING COUNTDOWN DEBUG ===');
+
+// Log all timer elements on page load
+document.querySelectorAll('.countdown-timer').forEach(timer => {
+    console.log('\n--- Timer Debug Info ---');
+    console.log('Booking ID:', timer.dataset.bookingId);
+    console.log('Raw created_at from DB:', timer.dataset.debugRawCreated);
+    console.log('Created timestamp:', timer.dataset.createdAt);
+    console.log('Current timestamp:', timer.dataset.debugCurrent);
+    console.log('Difference (from PHP):', timer.dataset.debugDiff, 'seconds');
+    
+    const created = parseInt(timer.dataset.createdAt);
+    const current = parseInt(timer.dataset.debugCurrent);
+    const diff = current - created;
+    
+    console.log('JavaScript calculation:');
+    console.log('  Created:', created);
+    console.log('  Current:', current);
+    console.log('  Difference:', diff, 'seconds');
+    console.log('  Time remaining:', (300 - diff), 'seconds');
+    console.log('  Should show:', Math.floor((300 - diff) / 60) + ':' + ((300 - diff) % 60).toString().padStart(2, '0'));
+});
+
+function updateCountdowns() {
+    const timers = document.querySelectorAll('.countdown-timer');
+    
+    timers.forEach(timer => {
+        const bookingId = timer.dataset.bookingId;
+        const createdAt = parseInt(timer.dataset.createdAt);
+        const serverCurrent = parseInt(timer.dataset.debugCurrent);
+        
+        // Calculate current time
+        const now = Math.floor(Date.now() / 1000);
+        
+        // Calculate elapsed time since booking was created
+        const elapsed = now - createdAt;
+        
+        // Calculate remaining time (300 seconds = 5 minutes)
+        const remaining = Math.max(0, 300 - elapsed);
+        
+        const minutes = Math.floor(remaining / 60);
+        const seconds = remaining % 60;
+        
+        const timeValue = timer.querySelector('.time-value');
+        
+        if (remaining > 0 && timeValue) {
+            timeValue.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
             
-            timers.forEach(timer => {
-                const bookingId = timer.dataset.bookingId;
-                const createdAt = parseInt(timer.dataset.createdAt);
-                const currentTime = Math.floor(Date.now() / 1000);
-                const elapsed = currentTime - createdAt;
-                const timeLeft = Math.max(0, 300 - elapsed); // 300 seconds = 5 minutes
-                
-                // Debug: Log values to console
-                console.log('Booking:', bookingId);
-                console.log('Created At (timestamp):', createdAt);
-                console.log('Current Time:', currentTime);
-                console.log('Elapsed:', elapsed, 'seconds');
-                console.log('Time Left:', timeLeft, 'seconds');
-                console.log('---');
-                
-                if (timeLeft > 0) {
-                    const minutes = Math.floor(timeLeft / 60);
-                    const seconds = timeLeft % 60;
-                    const timeValue = timer.querySelector('.time-value');
-                    
-                    if (timeValue) {
-                        timeValue.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-                    }
-                    
-                    // Change color based on time remaining
-                    timer.classList.remove('warning', 'critical');
-                    if (timeLeft <= 60) {
-                        timer.classList.add('critical');
-                    } else if (timeLeft <= 120) {
-                        timer.classList.add('warning');
-                    }
-                } else {
-                    // Time expired - disable button and update UI
-                    const cancelBtn = document.getElementById(`cancel-btn-${bookingId}`);
-                    if (cancelBtn && !cancelBtn.disabled) {
-                        cancelBtn.disabled = true;
-                        cancelBtn.innerHTML = '<i class="fas fa-ban"></i> Cancellation Expired';
-                        cancelBtn.title = 'Cancellation window expired (5 minutes)';
-                        timer.innerHTML = '<i class="fas fa-clock"></i> <span style="color: #64748b;">Cancellation period ended</span>';
-                        timer.classList.remove('warning', 'critical');
-                        timer.style.background = '#f1f5f9';
-                        timer.style.borderColor = '#cbd5e0';
-                        timer.style.color = '#64748b';
-                    }
-                }
-            });
-        }
-
-        // Update every second
-        setInterval(updateCountdowns, 1000);
-
-        // Initial update
-        updateCountdowns();
-
-        function confirmCancel(bookingId) {
-            document.getElementById('cancelBookingId').value = bookingId;
-            document.getElementById('cancelModal').classList.add('active');
-        }
-
-        function closeModal() {
-            document.getElementById('cancelModal').classList.remove('active');
-        }
-
-        // Close modal on overlay click
-        document.getElementById('cancelModal').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeModal();
+            timer.classList.remove('warning', 'critical');
+            if (remaining <= 60) {
+                timer.classList.add('critical');
+            } else if (remaining <= 120) {
+                timer.classList.add('warning');
             }
-        });
-
-        // Close modal on ESC key
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                closeModal();
+        } else if (remaining <= 0) {
+            const cancelBtn = document.getElementById(`cancel-btn-${bookingId}`);
+            if (cancelBtn && !cancelBtn.disabled) {
+                cancelBtn.disabled = true;
+                cancelBtn.innerHTML = '<i class="fas fa-ban"></i> Cancellation Expired';
+                timer.innerHTML = '<i class="fas fa-clock"></i> <span style="color: #64748b;">Cancellation period ended</span>';
+                timer.style.background = '#f1f5f9';
+                timer.style.borderColor = '#cbd5e0';
+                timer.style.color = '#64748b';
+                
+                setTimeout(() => location.reload(), 2000);
             }
-        });
+        }
+    });
+}
+
+updateCountdowns();
+setInterval(updateCountdowns, 1000);
+
+function confirmCancel(bookingId) {
+    document.getElementById('cancelBookingId').value = bookingId;
+    document.getElementById('cancelModal').classList.add('active');
+}
+
+function closeModal() {
+    document.getElementById('cancelModal').classList.remove('active');
+}
+
+document.getElementById('cancelModal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+});
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeModal();
+});
     </script>
 </body>
 </html>
