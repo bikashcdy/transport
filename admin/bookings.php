@@ -28,6 +28,34 @@ if (isset($_POST['delete_booking'])) {
         exit;
     }
 }
+if (isset($_GET['term'])) {
+    $term = $_GET['term'];
+
+    $stmt = $conn->prepare("
+        SELECT DISTINCT booking_id, user_name 
+        FROM bookings 
+        WHERE booking_id LIKE ? OR user_name LIKE ? 
+        LIMIT 10
+    ");
+    $searchTerm = "%" . $term . "%";
+    $stmt->bind_param("ss", $searchTerm, $searchTerm);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    $suggestions = [];
+    while ($row = $result->fetch_assoc()) {
+        // Suggest both booking ID and name
+        if (!empty($row['booking_id'])) {
+            $suggestions[] = $row['booking_id'];
+        }
+        if (!empty($row['user_name'])) {
+            $suggestions[] = $row['user_name'];
+        }
+    }
+
+    echo json_encode($suggestions);
+    exit;
+}
 
 // Handle status update
 if (isset($_POST['update_status'])) {
@@ -113,15 +141,15 @@ $query = "
 ";
 
 if (!empty($search)) {
-    $query .= " WHERE bookings.booking_id LIKE ?";
+    $query .= " WHERE bookings.booking_id LIKE ? 
+                OR bookings.user_name LIKE ? 
+                OR users.name LIKE ?";
 }
-
-$query .= " ORDER BY bookings.booking_id DESC";
 
 if (!empty($search)) {
     $stmt = $conn->prepare($query);
     $searchParam = "%$search%";
-    $stmt->bind_param("s", $searchParam);
+    $stmt->bind_param("sss", $searchParam, $searchParam, $searchParam);
     $stmt->execute();
     $result = $stmt->get_result();
 } else {
@@ -343,12 +371,20 @@ function pageContent()
         </div>
     </div>
 
+ <!-- jQuery UI for Autocomplete -->
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.js"></script>
+    
+    <!-- Bootstrap 5 JS (if not already loaded in template.php) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+
     <script>
+    // Booking data from PHP
+    const bookingsData = <?php echo json_encode($bookings); ?>;
+
     function viewBooking(bookingId) {
-        // Find the booking data from the table
-        <?php 
-        echo "const bookingsData = " . json_encode($bookings) . ";";
-        ?>
+        console.log('viewBooking called with ID:', bookingId);
         
         const booking = bookingsData.find(b => b.booking_id === bookingId);
         
@@ -383,15 +419,101 @@ function pageContent()
             `;
             
             document.getElementById('viewModalBody').innerHTML = content;
-            new bootstrap.Modal(document.getElementById('viewModal')).show();
+            
+            // Universal modal opener - works with Bootstrap 3, 4, or 5
+            const modalElement = document.getElementById('viewModal');
+            
+            if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                // Bootstrap 5
+                const modal = new bootstrap.Modal(modalElement);
+                modal.show();
+            } else if (typeof $ !== 'undefined' && $.fn.modal) {
+                // Bootstrap 3/4 with jQuery
+                $('#viewModal').modal('show');
+            } else {
+                // Manual fallback
+                modalElement.classList.add('show');
+                modalElement.style.display = 'block';
+                document.body.classList.add('modal-open');
+                
+                // Create backdrop
+                const backdrop = document.createElement('div');
+                backdrop.className = 'modal-backdrop fade show';
+                backdrop.id = 'viewModalBackdrop';
+                document.body.appendChild(backdrop);
+            }
+        } else {
+            alert('Booking not found!');
         }
     }
 
     function updateBooking(bookingId, currentStatus) {
+        console.log('updateBooking called:', bookingId, currentStatus);
+        
         document.getElementById('update_booking_id').value = bookingId;
         document.getElementById('status').value = currentStatus;
-        new bootstrap.Modal(document.getElementById('updateModal')).show();
+        
+        // Universal modal opener
+        const modalElement = document.getElementById('updateModal');
+        
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            // Bootstrap 5
+            const modal = new bootstrap.Modal(modalElement);
+            modal.show();
+        } else if (typeof $ !== 'undefined' && $.fn.modal) {
+            // Bootstrap 3/4 with jQuery
+            $('#updateModal').modal('show');
+        } else {
+            // Manual fallback
+            modalElement.classList.add('show');
+            modalElement.style.display = 'block';
+            document.body.classList.add('modal-open');
+            
+            // Create backdrop
+            const backdrop = document.createElement('div');
+            backdrop.className = 'modal-backdrop fade show';
+            backdrop.id = 'updateModalBackdrop';
+            document.body.appendChild(backdrop);
+        }
     }
+
+    // Close modal function for manual fallback
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('btn-close') || 
+            e.target.classList.contains('btn-secondary') ||
+            e.target.classList.contains('modal-backdrop')) {
+            
+            // Close all modals
+            document.querySelectorAll('.modal').forEach(modal => {
+                modal.classList.remove('show');
+                modal.style.display = 'none';
+            });
+            
+            // Remove backdrops
+            document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
+                backdrop.remove();
+            });
+            
+            document.body.classList.remove('modal-open');
+        }
+    });
+
+    // jQuery Autocomplete
+    $(function() {
+        $("input[name='search']").autocomplete({
+            source: function(request, response) {
+                $.ajax({
+                    url: "bookings.php",
+                    dataType: "json",
+                    data: { term: request.term },
+                    success: function(data) {
+                        response(data);
+                    }
+                });
+            },
+            minLength: 2
+        });
+    });
     </script>
 <?php
 }
