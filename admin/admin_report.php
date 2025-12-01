@@ -18,7 +18,8 @@ $totalUsers = $totalUsersResult ? $totalUsersResult->fetch_assoc()['total'] : 0;
 $totalVehiclesResult = $conn->query("SELECT COUNT(*) AS total FROM vehicles");
 $totalVehicles = $totalVehiclesResult ? $totalVehiclesResult->fetch_assoc()['total'] : 0;
 
-$totalRevenueResult = $conn->query("SELECT COALESCE(SUM(price), 0) AS total FROM bookings WHERE status='completed'");
+// UPDATED: Include both confirmed and completed bookings in revenue
+$totalRevenueResult = $conn->query("SELECT COALESCE(SUM(price), 0) AS total FROM bookings WHERE status IN ('confirmed', 'completed')");
 $totalRevenue = $totalRevenueResult ? $totalRevenueResult->fetch_assoc()['total'] : 0;
 
 // ====================== BOOKING STATUS ======================
@@ -38,7 +39,8 @@ $cancelledBookings = $cancelledBookingsResult ? $cancelledBookingsResult->fetch_
 $userActivityData = [];
 $result = $conn->query("
     SELECT u.id, u.name, u.email, COUNT(b.id) AS total_bookings, 
-           COALESCE(SUM(b.price), 0) AS total_spent, MAX(b.created_at) AS last_booking
+           COALESCE(SUM(CASE WHEN b.status IN ('confirmed', 'completed') THEN b.price ELSE 0 END), 0) AS total_spent, 
+           MAX(b.created_at) AS last_booking
     FROM users u LEFT JOIN bookings b ON u.id = b.user_id
     WHERE u.user_type = 'user' GROUP BY u.id, u.name, u.email
     ORDER BY total_bookings DESC LIMIT 20
@@ -52,9 +54,14 @@ if ($result) {
 // ====================== MONTHLY REVENUE ======================
 $monthlyRevenue = [];
 $result = $conn->query("
-    SELECT DATE_FORMAT(created_at, '%Y-%m') AS month, COALESCE(SUM(price), 0) AS revenue, COUNT(*) AS bookings
-    FROM bookings WHERE status='completed' AND created_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
-    GROUP BY DATE_FORMAT(created_at, '%Y-%m') ORDER BY month ASC
+    SELECT DATE_FORMAT(created_at, '%Y-%m') AS month, 
+           COALESCE(SUM(price), 0) AS revenue, 
+           COUNT(*) AS bookings
+    FROM bookings 
+    WHERE status IN ('confirmed', 'completed') 
+    AND created_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+    GROUP BY DATE_FORMAT(created_at, '%Y-%m') 
+    ORDER BY month ASC
 ");
 if ($result) {
     while ($row = $result->fetch_assoc()) {
@@ -97,6 +104,7 @@ if ($result) {
 .card:hover { transform: translateY(-5px); box-shadow: 0 4px 15px rgba(0,0,0,0.15); }
 .card h3 { margin: 0 0 10px 0; font-size: 16px; color: #7f8c8d; text-transform: uppercase; }
 .card p { margin: 0; font-size: 32px; font-weight: bold; color: #2c3e50; }
+.card .subtitle { font-size: 12px; color: #95a5a6; margin-top: 8px; }
 .empty-state { text-align: center; padding: 40px; background: #f8f9fa; border-radius: 8px; margin: 20px 0; }
 .empty-state h3 { color: #6c757d; margin-bottom: 10px; }
 .empty-state p { color: #adb5bd; }
@@ -128,6 +136,7 @@ if ($result) {
         <div class="card" style="border-top: 4px solid #e74c3c;">
             <h3>💰 Total Revenue</h3>
             <p>Rs. <?= number_format($totalRevenue) ?></p>
+            <div class="subtitle">Confirmed + Completed</div>
         </div>
     </div>
 
@@ -167,6 +176,7 @@ if ($result) {
     <?php if (!empty($monthlyRevenue)): ?>
     <div class="chart-container">
         <h2>💰 Monthly Revenue Trend</h2>
+        <p style="color: #7f8c8d; margin-bottom: 15px; font-size: 14px;">Revenue includes both confirmed and completed bookings</p>
         <table style="width: 100%; border-collapse: collapse;">
             <thead>
                 <tr style="background: #3498db; color: white;">

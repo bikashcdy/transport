@@ -36,6 +36,28 @@ if ($result->num_rows === 0) {
 $vehicle = $result->fetch_assoc();
 $stmt->close();
 
+// ===== GET USER DETAILS FOR AUTO-FILL =====
+$user_id = $_SESSION['user_id'];
+$user_full_name = '';
+$user_email = '';
+
+$userQuery = "SELECT name, email FROM users WHERE id = ?";
+$userStmt = $conn->prepare($userQuery);
+
+if ($userStmt) {
+    $userStmt->bind_param("i", $user_id);
+    $userStmt->execute();
+    $userResult = $userStmt->get_result();
+    
+    if ($userResult && $userResult->num_rows > 0) {
+        $userData = $userResult->fetch_assoc();
+        $user_full_name = $userData['name'] ?? '';
+        $user_email = $userData['email'] ?? '';
+    }
+    $userStmt->close();
+}
+// ===== END USER DETAILS =====
+
 // ===== CALCULATE TOTAL PRICE BASED ON DAYS =====
 $start = new DateTime($start_date);
 $end = new DateTime($end_date);
@@ -417,6 +439,7 @@ $username = $_SESSION['username'] ?? 'User';
                             id="fullName"
                             class="form-input"
                             placeholder="Enter your full name"
+                            value="<?= htmlspecialchars($user_full_name) ?>"
                             required
                         />
                         <div class="error-message" id="fullNameError">Full name is required</div>
@@ -455,6 +478,7 @@ $username = $_SESSION['username'] ?? 'User';
                             id="email"
                             class="form-input"
                             placeholder="your.email@example.com"
+                            value="<?= htmlspecialchars($user_email) ?>"
                             required
                         />
                         <div class="error-message" id="emailError">Please enter a valid email</div>

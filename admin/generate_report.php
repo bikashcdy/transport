@@ -41,7 +41,8 @@ $totalBookings = getCount($conn, "SELECT COUNT(*) AS total FROM bookings");
 $totalUsers = getCount($conn, "SELECT COUNT(*) AS total FROM users WHERE user_type='user'");
 $totalVehicles = getCount($conn, "SELECT COUNT(*) AS total FROM vehicles");
 
-$revenueResult = safeQuery($conn, "SELECT COALESCE(SUM(price), 0) AS total FROM bookings WHERE status='completed'");
+// FIXED: Include both completed AND confirmed bookings for revenue
+$revenueResult = safeQuery($conn, "SELECT COALESCE(SUM(price), 0) AS total FROM bookings WHERE status IN ('completed', 'confirmed')");
 $totalRevenue = $revenueResult->fetch_assoc()['total'] ?? 0;
 $avgBookingValue = $totalBookings > 0 ? $totalRevenue / $totalBookings : 0;
 
@@ -68,13 +69,15 @@ $confirmedBookings = $statusData['confirmed']['count'] ?? 0;
 $completedBookings = $statusData['completed']['count'] ?? 0;
 $cancelledBookings = $statusData['cancelled']['count'] ?? 0;
 
-// 3. Monthly Revenue Trend
+// 3. Monthly Revenue Trend - FIXED: Include confirmed bookings
 $monthlyRevenue = [];
 $result = safeQuery($conn, "
     SELECT 
         DATE_FORMAT(created_at, '%Y-%m') AS month,
-        COALESCE(SUM(price), 0) AS revenue,
-        COUNT(*) AS bookings
+        COALESCE(SUM(CASE WHEN status IN ('completed', 'confirmed') THEN price ELSE 0 END), 0) AS revenue,
+        COUNT(*) AS bookings,
+        COALESCE(SUM(CASE WHEN status = 'completed' THEN price ELSE 0 END), 0) AS completed_revenue,
+        COALESCE(SUM(CASE WHEN status = 'confirmed' THEN price ELSE 0 END), 0) AS confirmed_revenue
     FROM bookings
     WHERE created_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
     GROUP BY DATE_FORMAT(created_at, '%Y-%m')
@@ -85,7 +88,7 @@ while ($row = $result->fetch_assoc()) {
     $monthlyRevenue[] = $row;
 }
 
-// 4. Top Performing Vehicles - FIXED FOR YOUR TABLE STRUCTURE
+// 4. Top Performing Vehicles - FIXED: Include confirmed bookings
 $topVehicles = [];
 $result = safeQuery($conn, "
     SELECT 
@@ -95,7 +98,7 @@ $result = safeQuery($conn, "
         v.vehicle_type_id,
         v.capacity,
         COUNT(b.id) AS total_bookings,
-        COALESCE(SUM(b.price), 0) AS revenue
+        COALESCE(SUM(CASE WHEN b.status IN ('completed', 'confirmed') THEN b.price ELSE 0 END), 0) AS revenue
     FROM vehicles v
     LEFT JOIN bookings b ON v.id = b.vehicle_id
     GROUP BY v.id, v.vehicle_number, v.vehicle_name, v.vehicle_type_id, v.capacity
@@ -107,14 +110,14 @@ while ($row = $result->fetch_assoc()) {
     $topVehicles[] = $row;
 }
 
-// 5. Top Customers
+// 5. Top Customers - FIXED: Include confirmed bookings
 $topUsers = [];
 $result = safeQuery($conn, "
     SELECT 
         u.name, 
         u.email,
         COUNT(b.id) AS total_bookings, 
-        COALESCE(SUM(b.price), 0) AS total_spent,
+        COALESCE(SUM(CASE WHEN b.status IN ('completed', 'confirmed') THEN b.price ELSE 0 END), 0) AS total_spent,
         MAX(b.created_at) AS last_booking
     FROM users u
     LEFT JOIN bookings b ON u.id = b.user_id
@@ -149,7 +152,7 @@ while ($row = $result->fetch_assoc()) {
     $recentBookings[] = $row;
 }
 
-// 7. Booking Duration Analysis (only if bookings exist)
+// 7. Booking Duration Analysis - FIXED: Include confirmed bookings
 $durationAnalysis = [];
 if ($totalBookings > 0) {
     $result = safeQuery($conn, "
@@ -161,10 +164,10 @@ if ($totalBookings > 0) {
                 ELSE '10+ days'
             END as duration_range,
             COUNT(*) as count,
-            AVG(price) as avg_price,
-            SUM(price) as total_revenue
+            AVG(CASE WHEN status IN ('completed', 'confirmed') THEN price ELSE NULL END) as avg_price,
+            SUM(CASE WHEN status IN ('completed', 'confirmed') THEN price ELSE 0 END) as total_revenue
         FROM bookings
-        WHERE status = 'completed'
+        WHERE status IN ('completed', 'confirmed')
         GROUP BY duration_range
         ORDER BY 
             CASE duration_range
@@ -180,7 +183,7 @@ if ($totalBookings > 0) {
     }
 }
 
-// 8. Day of Week Analysis (only if recent bookings exist)
+// 8. Day of Week Analysis - FIXED: Include confirmed bookings
 $dayAnalysis = [];
 $recentBookingsCount = getCount($conn, "SELECT COUNT(*) AS total FROM bookings WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)");
 
@@ -189,7 +192,7 @@ if ($recentBookingsCount > 0) {
         SELECT 
             DAYNAME(created_at) as day_name,
             COUNT(*) as bookings,
-            COALESCE(SUM(price), 0) as revenue
+            COALESCE(SUM(CASE WHEN status IN ('completed', 'confirmed') THEN price ELSE 0 END), 0) as revenue
         FROM bookings
         WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
         GROUP BY DAYOFWEEK(created_at), DAYNAME(created_at)
@@ -333,9 +336,13 @@ $pdf->MetricCard('Total Vehicles', number_format($totalVehicles), 154, $y, [231,
 
 $pdf->Ln(18);
 
-// Average Booking Value
+// Average Booking Value with note
 $pdf->SetFont('Arial', 'B', 10);
 $pdf->Cell(0, 7, 'Average Booking Value: Rs. ' . number_format($avgBookingValue, 2), 0, 1, 'C');
+$pdf->SetFont('Arial', 'I', 8);
+$pdf->SetTextColor(100, 100, 100);
+$pdf->Cell(0, 5, '(Revenue includes both completed and confirmed bookings)', 0, 1, 'C');
+$pdf->SetTextColor(0, 0, 0);
 $pdf->Ln(8);
 
 // ====================== BOOKING STATUS WITH REVENUE ======================
@@ -368,24 +375,24 @@ $pdf->Ln(10);
 
 // ====================== MONTHLY REVENUE TREND ======================
 if (!empty($monthlyRevenue)) {
-    $pdf->SectionTitle('Monthly Revenue Trend', 155, 89, 182);
+    $pdf->SectionTitle('Monthly Revenue Trend (Confirmed + Completed)', 155, 89, 182);
 
-    $revenueHeader = ['Month', 'Bookings', 'Revenue', 'Avg/Booking'];
+    $revenueHeader = ['Month', 'Bookings', 'Total Revenue', 'Confirmed', 'Completed'];
     $revenueData = [];
     
     foreach ($monthlyRevenue as $data) {
         $monthName = date('M Y', strtotime($data['month'] . '-01'));
-        $avgPerMonth = $data['bookings'] > 0 ? $data['revenue'] / $data['bookings'] : 0;
         
         $revenueData[] = [
             $monthName,
             number_format($data['bookings']),
             'Rs. ' . number_format($data['revenue']),
-            'Rs. ' . number_format($avgPerMonth)
+            'Rs. ' . number_format($data['confirmed_revenue']),
+            'Rs. ' . number_format($data['completed_revenue'])
         ];
     }
 
-    $pdf->ColorTable($revenueHeader, $revenueData, [45, 35, 55, 45], ['L', 'C', 'R', 'R']);
+    $pdf->ColorTable($revenueHeader, $revenueData, [35, 25, 40, 40, 40], ['L', 'C', 'R', 'R', 'R']);
     $pdf->Ln(10);
 }
 
@@ -467,7 +474,7 @@ if (!empty($durationAnalysis) || !empty($dayAnalysis)) {
 
     // Day of Week Analysis
     if (!empty($dayAnalysis)) {
-        $pdf->SectionTitle('Weekly Pattern Analysis', 241, 196, 15);
+        $pdf->SectionTitle('Weekly Pattern Analysis (Last 30 Days)', 241, 196, 15);
         
         $dayHeader = ['Day', 'Bookings', 'Revenue', 'Avg/Booking'];
         $dayData = [];
