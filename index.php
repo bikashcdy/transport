@@ -450,6 +450,19 @@ unset($_SESSION['show_signup']);
         // ===== Full Name Validation =====
         const fullNameInput = document.getElementById('full-name');
 
+        // ===== Email Validation =====
+const emailInput = document.getElementById('signup-email');
+
+function validateEmail(email) {
+    const strongRegex = /^[A-Za-z0-9._%+-]+@[A-Za-z.-]+\.[A-Za-z]{2,}$/;
+    const domainPart = email.split('@')[1] || "";
+    const domainName = domainPart.split('.')[0] || "";
+    if (!strongRegex.test(email)) return false;
+    if (!/[A-Za-z]/.test(domainName)) return false; // Blocks numeric-only domain
+    return true;
+}
+
+
         function validateSignupForm() {
             const fullName = fullNameInput.value.trim();
             const password = passwordInput.value;
@@ -477,6 +490,14 @@ unset($_SESSION['show_signup']);
                     return false;
                 }
             }
+
+            // Email Validation
+const email = emailInput.value.trim();
+if (!validateEmail(email)) {
+    alert('Invalid Email Format! Please enter a valid email like example@gmail.com');
+    emailInput.focus();
+    return false;
+}
 
             // Password Validation
             if (!checks.length) { alert('Password must be at least 8 characters long.'); passwordInput.focus(); return false; }
