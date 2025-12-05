@@ -36,7 +36,7 @@ if ($result->num_rows === 0) {
 $vehicle = $result->fetch_assoc();
 $stmt->close();
 
-// ===== GET USER DETAILS FOR AUTO-FILL =====
+// Get user details for auto-fill
 $user_id = $_SESSION['user_id'];
 $user_full_name = '';
 $user_email = '';
@@ -56,17 +56,15 @@ if ($userStmt) {
     }
     $userStmt->close();
 }
-// ===== END USER DETAILS =====
 
-// ===== CALCULATE TOTAL PRICE BASED ON DAYS =====
+// Calculate total price based on days
 $start = new DateTime($start_date);
 $end = new DateTime($end_date);
 $days = $start->diff($end)->days;
-if ($days == 0) $days = 1; // Minimum 1 day
+if ($days == 0) $days = 1;
 
 $daily_rate = $vehicle['price'];
 $total_price = $daily_rate * $days;
-// ===== END CALCULATION =====
 
 $username = $_SESSION['username'] ?? 'User';
 ?>
@@ -373,7 +371,6 @@ $username = $_SESSION['username'] ?? 'User';
     </style>
 </head>
 <body>
-    <!-- Booking Modal (Auto-opens) -->
     <div class="modal-overlay" id="bookingModal">
         <div class="modal-content">
             <div class="modal-header">
@@ -423,6 +420,7 @@ $username = $_SESSION['username'] ?? 'User';
                     Your Details
                 </h4>
 
+                <!-- IMPORTANT: Form submits to user_booking.php -->
                 <form id="bookingForm" action="user_booking.php" method="POST">
                     <input type="hidden" name="vehicle_id" value="<?= $vehicle_id ?>">
                     <input type="hidden" name="start_date" value="<?= htmlspecialchars($start_date) ?>">
@@ -511,7 +509,6 @@ $username = $_SESSION['username'] ?? 'User';
 
     <script>
         function closeModal() {
-            // Redirect back to dashboard when closing
             window.location.href = 'user_dashboard.php';
         }
 
@@ -519,11 +516,9 @@ $username = $_SESSION['username'] ?? 'User';
         document.getElementById('bookingForm').addEventListener('submit', function(e) {
             let isValid = true;
             
-            // Clear previous errors
             document.querySelectorAll('.error-message').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.form-input').forEach(el => el.classList.remove('error'));
             
-            // Full Name
             const fullName = document.getElementById('fullName');
             if (!fullName.value.trim()) {
                 fullName.classList.add('error');
@@ -531,7 +526,6 @@ $username = $_SESSION['username'] ?? 'User';
                 isValid = false;
             }
             
-            // Contact Number
             const contactNumber = document.getElementById('contactNumber');
             const phoneRegex = /^\d{10}$/;
             if (!phoneRegex.test(contactNumber.value.replace(/\s/g, ''))) {
@@ -540,7 +534,6 @@ $username = $_SESSION['username'] ?? 'User';
                 isValid = false;
             }
             
-            // Alternative Number
             const alternativeNumber = document.getElementById('alternativeNumber');
             if (alternativeNumber.value.trim() && !phoneRegex.test(alternativeNumber.value.replace(/\s/g, ''))) {
                 alternativeNumber.classList.add('error');
@@ -548,7 +541,6 @@ $username = $_SESSION['username'] ?? 'User';
                 isValid = false;
             }
             
-            // Email
             const email = document.getElementById('email');
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (!emailRegex.test(email.value.trim())) {
@@ -559,7 +551,6 @@ $username = $_SESSION['username'] ?? 'User';
             
             if (!isValid) {
                 e.preventDefault();
-                // Scroll to first error
                 const firstError = document.querySelector('.form-input.error');
                 if (firstError) {
                     firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -567,7 +558,6 @@ $username = $_SESSION['username'] ?? 'User';
             }
         });
 
-        // Clear error on input
         document.querySelectorAll('.form-input, .form-textarea').forEach(input => {
             input.addEventListener('input', function() {
                 this.classList.remove('error');

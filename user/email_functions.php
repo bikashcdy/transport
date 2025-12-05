@@ -281,7 +281,7 @@ function generateUserEmailHTML($booking) {
         <!-- HEADER -->
         <div class="header">
             <h1>Booking Confirmed!</h1>
-            <div class="badge">Successfully Reserved</div>
+           <div class="badge">✓ Confirmed & Ready</div>
         </div>
 
         <!-- CONTENT -->
@@ -335,7 +335,7 @@ function generateUserEmailHTML($booking) {
             <div class="notice">
                 <h3>Important Information</h3>
                 <ul>
-                    <li>Your booking is currently <strong>PENDING</strong> and will be confirmed shortly.</li>
+                    <li>Your booking has been <strong>CONFIRMED</strong> ✓</li>
                     <li>Please save your Booking ID: <strong>' . htmlspecialchars($booking['booking_id']) . '</strong></li>
                     <li>Arrive 15 minutes before your scheduled trip start time.</li>
                     <li>We will contact you at <strong>' . htmlspecialchars($booking['contact_number']) . '</strong> if needed.</li>
@@ -503,7 +503,30 @@ function generateAdminEmailHTML($booking) {
         <!-- HEADER -->
         <div class="header">
             <h1>NEW VEHICLE BOOKING</h1>
-            <p>Action Required - Review & Confirm</p>
+            <p>New Booking - Already Confirmed</p>
+```
+
+---
+
+## 📧 Email Sending Status:
+
+Your email function **should be working** now. Let me verify the configuration:
+
+✅ PHPMailer is loaded correctly  
+✅ SMTP settings are configured (Gmail)  
+✅ Your email: `bikashtransportt@gmail.com`  
+✅ App password is set: `nodc knlq hxgf inul`  
+✅ Function sends emails to both user and admin  
+
+## 🧪 Testing:
+
+To test if emails are working:
+
+1. Make a test booking
+2. Check your server error logs for these messages:
+```
+   "User email failed: [error message]"
+   "Admin email failed: [error message]"
         </div>
 
         <!-- CONTENT -->
@@ -523,7 +546,7 @@ function generateAdminEmailHTML($booking) {
                 </div>
                 <div class="row">
                     <span class="label">Status:</span>
-                    <span class="status-pending">PENDING</span>
+                   <span class="status-confirmed" style="background-color: #48bb78; color: #ffffff; padding: 3px 8px; border-radius: 4px; font-weight: 600;">CONFIRMED</span>
                 </div>
                 <div class="row">
                     <span class="label">Total Price:</span>

@@ -475,20 +475,20 @@ $username = $_SESSION['username'] ?? 'User';
     </div>
     <div class="price-value">Rs. <?= number_format($booking['price'], 2) ?></div>
 </div>
-            <div class="important-note">
-                <h4>
-                    <i class="fas fa-exclamation-triangle"></i>
-                    Important Information
-                </h4>
-                <ul>
-                    <li>Please save your <strong>Booking ID: <?= htmlspecialchars($booking['booking_id']) ?></strong> for future reference</li>
-                    <li>Your booking is currently in <strong>Pending</strong> status</li>
-                    <li>Admin will review and confirm your booking shortly</li>
-                    <li>You will receive a confirmation email at <strong><?= htmlspecialchars($booking['user_email']) ?></strong> once approved</li>
-                    <li>We will contact you on <strong><?= htmlspecialchars($booking['contact_number']) ?></strong> if needed</li>
-                    <li>Please arrive 15 minutes before your trip starts</li>
-                </ul>
-            </div>
+           <div class="important-note">
+    <h4>
+        <i class="fas fa-exclamation-triangle"></i>
+        Important Information
+    </h4>
+    <ul>
+        <li>Please save your <strong>Booking ID: <?= htmlspecialchars($booking['booking_id']) ?></strong> for future reference</li>
+        <li>Your booking has been <strong>Confirmed</strong> ✓</li>
+        <li>A confirmation email has been sent to <strong><?= htmlspecialchars($booking['user_email']) ?></strong></li>
+        <li>We will contact you on <strong><?= htmlspecialchars($booking['contact_number']) ?></strong> if needed</li>
+        <li>Please arrive 15 minutes before your trip starts</li>
+        <li>Keep your Booking ID handy for the trip</li>
+    </ul>
+</div>
 
             <div class="action-buttons">
                 <a href="user_dashboard.php" class="btn btn-primary">

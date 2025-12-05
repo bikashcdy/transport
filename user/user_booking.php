@@ -6,7 +6,6 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'user') {
 }
 
 require_once '../db.php';
-// ADD THIS LINE: Include the email functions
 require_once 'email_functions.php';
 
 // Check if form was submitted
@@ -106,7 +105,7 @@ $stmt->close();
 // Check if vehicle is already booked for these dates
 $checkQuery = "SELECT COUNT(*) as count FROM bookings 
                WHERE vehicle_id = ? 
-               AND status IN ('pending', 'confirmed')
+               AND status = 'confirmed'
                AND ((trip_start BETWEEN ? AND ?) 
                     OR (trip_end BETWEEN ? AND ?)
                     OR (trip_start <= ? AND trip_end >= ?))";
@@ -160,29 +159,6 @@ while ($idCheckRow['count'] > 0 && $attempts < 10) {
     $attempts++;
 }
 
-// Insert booking with new fields
-$insertQuery = "INSERT INTO bookings (
-    booking_id, 
-    user_id, 
-    vehicle_id, 
-    trip_start, 
-    trip_end, 
-    price, 
-    status, 
-    user_name, 
-    contact_number, 
-    alternative_number, 
-    email, 
-    notes
-) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)";
-
-$insertStmt = $conn->prepare($insertQuery);
-if (!$insertStmt) {
-    $_SESSION['error'] = "Database error: " . $conn->error;
-    header("Location: user_dashboard.php");
-    exit;
-}
-
 // Get the calculated total price from the form
 $total_price = floatval($_POST['total_price'] ?? 0);
 $daily_rate = floatval($_POST['daily_rate'] ?? 0);
@@ -198,6 +174,29 @@ if ($total_price == 0) {
     $daily_rate = $vehicle['price'];
 }
 
+// Insert booking with status='confirmed'
+$insertQuery = "INSERT INTO bookings (
+    booking_id, 
+    user_id, 
+    vehicle_id, 
+    trip_start, 
+    trip_end, 
+    price, 
+    status, 
+    user_name, 
+    contact_number, 
+    alternative_number, 
+    email, 
+    notes
+) VALUES (?, ?, ?, ?, ?, ?, 'confirmed', ?, ?, ?, ?, ?)";
+
+$insertStmt = $conn->prepare($insertQuery);
+if (!$insertStmt) {
+    $_SESSION['error'] = "Database error: " . $conn->error;
+    header("Location: user_dashboard.php");
+    exit;
+}
+
 $insertStmt->bind_param(
     "siissdsssss",
     $booking_id,
@@ -205,7 +204,7 @@ $insertStmt->bind_param(
     $vehicle_id,
     $start_date,
     $end_date,
-    $total_price,  // <-- NOW USES CALCULATED TOTAL
+    $total_price,
     $full_name,
     $contact_number,
     $alternative_number,
@@ -217,52 +216,58 @@ if ($insertStmt->execute()) {
     $insertStmt->close();
     
     // Store booking details in session for success page
-   $_SESSION['booking_success'] = [
-    'booking_id' => $booking_id,
-    'vehicle_name' => $vehicle['vehicle_name'],
-    'vehicle_number' => $vehicle['vehicle_number'],
-    'vehicle_type' => $vehicle['type_name'],
-    'trip_start' => $start_date,
-    'trip_end' => $end_date,
-    'price' => $total_price,  // ← CHANGED
-    'daily_rate' => $daily_rate,  // ← ADDED
-    'days' => $days,  // ← ADDED
-    'user_name' => $full_name,
-    'user_email' => $email,
-    'contact_number' => $contact_number,
-    'alternative_number' => $alternative_number,
-    'notes' => $notes
-];
+    $_SESSION['booking_success'] = [
+        'booking_id' => $booking_id,
+        'vehicle_name' => $vehicle['vehicle_name'],
+        'vehicle_number' => $vehicle['vehicle_number'],
+        'vehicle_type' => $vehicle['type_name'],
+        'trip_start' => $start_date,
+        'trip_end' => $end_date,
+        'price' => $total_price,
+        'daily_rate' => $daily_rate,
+        'days' => $days,
+        'user_name' => $full_name,
+        'user_email' => $email,
+        'contact_number' => $contact_number,
+        'alternative_number' => $alternative_number,
+        'notes' => $notes
+    ];
     
-    // ===== ADD EMAIL SENDING HERE =====
+    // ===== SEND EMAIL =====
+    error_log("=== BOOKING EMAIL DEBUG ===");
+    error_log("Booking ID: " . $booking_id);
+    error_log("User email: " . $email);
+    
     // Prepare booking data for email
- $emailData = [
-    'booking_id' => $booking_id,
-    'user_name' => $full_name,
-    'user_email' => $email,
-    'contact_number' => $contact_number,
-    'alternative_number' => $alternative_number,
-    'vehicle_name' => $vehicle['vehicle_name'],
-    'vehicle_number' => $vehicle['vehicle_number'],
-    'vehicle_type' => $vehicle['type_name'],
-    'trip_start' => $start_date,
-    'trip_end' => $end_date,
-    'price' => $total_price,  // ← CHANGED
-    'daily_rate' => $daily_rate,  // ← ADDED
-    'days' => $days,  // ← ADDED
-    'notes' => $notes
-];
+    $emailData = [
+        'booking_id' => $booking_id,
+        'user_name' => $full_name,
+        'user_email' => $email,
+        'email' => $email,
+        'contact_number' => $contact_number,
+        'alternative_number' => $alternative_number,
+        'vehicle_name' => $vehicle['vehicle_name'],
+        'vehicle_number' => $vehicle['vehicle_number'],
+        'vehicle_type' => $vehicle['type_name'],
+        'trip_start' => $start_date,
+        'trip_end' => $end_date,
+        'price' => $total_price,
+        'daily_rate' => $daily_rate,
+        'days' => $days,
+        'notes' => $notes
+    ];
     
     // Send confirmation email
-    $emailSent = sendBookingConfirmationEmail($emailData);
-    
-    // Optional: Log email status
-    if ($emailSent) {
-        error_log("Booking confirmation email sent successfully to: " . $email);
-    } else {
-        error_log("Failed to send booking confirmation email to: " . $email);
-        // Note: We don't stop the process if email fails
-        // The booking is still successful
+    try {
+        $emailSent = sendBookingConfirmationEmail($emailData);
+        
+        if ($emailSent) {
+            error_log("✓ Email sent successfully to: " . $email);
+        } else {
+            error_log("✗ Email sending failed for: " . $email);
+        }
+    } catch (Exception $e) {
+        error_log("✗ Email exception: " . $e->getMessage());
     }
     // ===== END EMAIL SENDING =====
     
