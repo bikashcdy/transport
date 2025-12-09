@@ -15,27 +15,27 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         if (strlen($password) < 8) {
             $_SESSION['error'] = "Password must be at least 8 characters long.";
             $_SESSION['show_signup'] = true; 
-            header("Location: index.php");
+            header("Location: Sign_in.php");
             exit();
         } elseif (!preg_match("/[A-Z]/", $password)) {
             $_SESSION['error'] = "Password must contain at least one uppercase letter.";
             $_SESSION['show_signup'] = true;
-            header("Location: index.php");
+            header("Location: Sign_in.php");
             exit();
         } elseif (!preg_match("/[a-z]/", $password)) {
             $_SESSION['error'] = "Password must contain at least one lowercase letter.";
             $_SESSION['show_signup'] = true;
-            header("Location: index.php");
+            header("Location: Sign_in.php");
             exit();
         } elseif (!preg_match("/[0-9]/", $password)) {
             $_SESSION['error'] = "Password must contain at least one number.";
             $_SESSION['show_signup'] = true;
-            header("Location: index.php");
+            header("Location: Sign_in.php");
             exit();
         } elseif (!preg_match("/[!@#$%^&*(),.?\":{}|<>]/", $password)) {
             $_SESSION['error'] = "Password must contain at least one special character.";
             $_SESSION['show_signup'] = true;
-            header("Location: index.php");
+            header("Location: Sign_in.php");
             exit();
         }
 
@@ -49,7 +49,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         if ($check_result->num_rows > 0) {
             $_SESSION['error'] = "❌ Email already exists. Please use a different email.";
             $_SESSION['show_signup'] = true;
-            header("Location: index.php");
+            header("Location: Sign_in.php");
             exit();
         }
 
@@ -62,12 +62,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         if ($stmt->execute()) {
             $_SESSION['message'] = "✅ Account created successfully! Please log in.";
             $_SESSION['show_signup'] = false;
-            header("Location: index.php");
+            header("Location: Sign_in.php");
             exit();
         } else {
             $_SESSION['error'] = "❌ Database error. Please try again.";
             $_SESSION['show_signup'] = true;
-            header("Location: index.php");
+            header("Location: Sign_in.php");
             exit();
         }
     }
@@ -98,12 +98,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 exit();
             } else {
                 $_SESSION['error'] = "❌ Invalid password!";
-                header("Location: index.php");
+                header("Location: Sign_in.php");
                 exit();
             }
         } else {
             $_SESSION['error'] = "❌ No account found with that email.";
-            header("Location: index.php");
+            header("Location: Sign_in.php");
             exit();
  
         }
@@ -111,6 +111,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 }
 
 
-header("Location: index.php");
+header("Location: Sign_in.php");
 exit();
 ?>
