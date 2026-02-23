@@ -306,7 +306,7 @@ unset($_SESSION['show_signup']);
                 <form id="login-form" method="POST" action="server.php">
                     <div class="form-group">
                         <label for="login-email">Email Address</label>
-                        <input type="email" id="login-email" name="email" placeholder="Enter your email" required>
+                        <input type="text" id="login-email" name="email" placeholder="Enter your email" required>
                     </div>
 
                     <div class="form-group">
@@ -508,6 +508,17 @@ if (!validateEmail(email)) {
 
             return true; // All validations passed
         }
+        
+        // ===== Login Email Validation =====
+document.getElementById('login-form').onsubmit = function() {
+    const loginEmail = document.getElementById('login-email').value.trim();
+    if (!validateEmail(loginEmail)) {
+        alert('Invalid Email Format! Please enter a valid email like example@gmail.com');
+        document.getElementById('login-email').focus();
+        return false;
+    }
+    return true;
+}
 
         // Auto hide messages
         const messages = document.querySelectorAll('.message');
